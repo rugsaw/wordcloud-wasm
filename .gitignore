@@ -1,0 +1,14 @@
+# Rust build artifacts
+/crate/target/
+**/*.rs.bk
+
+# Generated wasm-pack output (crate/pkg is a secondary build target; root pkg/ is committed for GitHub Pages)
+/crate/pkg/
+
+# Node
+node_modules/
+*.tgz
+
+# Editor / OS
+.DS_Store
+*.swp

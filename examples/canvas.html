@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Canvas — wordcloud-wasm</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-back" href="../">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06z"/></svg>
+    wordcloud-wasm
+  </a>
+  <span class="nav-sep">/</span>
+  <span class="nav-title">Canvas renderer</span>
+</nav>
+
+<div class="page">
+
+  <div class="section">
+    <h2>Word Cloud — Canvas renderer</h2>
+    <p class="section-sub">
+      The layout engine computes word positions in WebAssembly; this page renders
+      them with a plain <code>&lt;canvas&gt;</code>. No bundler, no framework.
+    </p>
+
+    <div class="controls">
+      <button class="btn size-btn active" data-n="50"   data-mode="pretty">50 words</button>
+      <button class="btn size-btn"        data-n="500"  data-mode="pretty">500 words</button>
+      <button class="btn size-btn"        data-n="5000" data-mode="fast"  >5 000 words</button>
+      <button class="btn" id="rerender">Re-render</button>
+      <span class="meta" id="meta"></span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>canvas.html</span>
+      </div>
+      <div class="panel-body">
+        <div class="canvas-wrap" style="max-height: 580px;">
+          <canvas id="cloud"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Code</h2>
+    <div class="code-block">
+      <div class="code-block-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>your-app.js</span>
+      </div>
+      <pre><span class="cm">// One async call — no bundler needed. Serve over HTTP.</span>
+<span class="kw">import</span> { <span class="id">layout</span> } <span class="kw">from</span> <span class="str">"./js/index.js"</span>;
+
+<span class="kw">const</span> <span class="id">items</span> = [
+  { <span class="id">text</span>: <span class="str">"WebAssembly"</span>, <span class="id">weight</span>: <span class="nu">100</span> },
+  { <span class="id">text</span>: <span class="str">"Rust"</span>,        <span class="id">weight</span>: <span class="nu">80</span>  },
+  { <span class="id">text</span>: <span class="str">"layout"</span>,      <span class="id">weight</span>: <span class="nu">40</span>  },
+];
+
+<span class="kw">const</span> <span class="id">placements</span> = <span class="kw">await</span> <span class="fn">layout</span>(<span class="id">items</span>, {
+  <span class="id">mode</span>:        <span class="str">"pretty"</span>,  <span class="cm">// "pretty" | "balanced" | "fast"</span>
+  <span class="id">width</span>:       <span class="nu">960</span>,
+  <span class="id">height</span>:      <span class="nu">600</span>,
+  <span class="id">minFontSize</span>: <span class="nu">14</span>,
+  <span class="id">maxFontSize</span>: <span class="nu">88</span>,
+  <span class="id">padding</span>:     <span class="nu">2</span>,
+});
+<span class="cm">// → [{ text, x, y, rotation, fontSize }, ...]</span>
+<span class="cm">// x/y are bounding-box center — render with center anchoring.</span>
+
+<span class="kw">const</span> <span class="id">ctx</span> = <span class="id">canvas</span>.<span class="fn">getContext</span>(<span class="str">"2d"</span>);
+<span class="id">ctx</span>.<span class="id">textAlign</span>    = <span class="str">"center"</span>;
+<span class="id">ctx</span>.<span class="id">textBaseline</span> = <span class="str">"middle"</span>;
+
+<span class="kw">for</span> (<span class="kw">const</span> <span class="id">p</span> <span class="kw">of</span> <span class="id">placements</span>) {
+  <span class="id">ctx</span>.<span class="fn">save</span>();
+  <span class="id">ctx</span>.<span class="fn">translate</span>(<span class="id">p</span>.<span class="id">x</span>, <span class="id">p</span>.<span class="id">y</span>);
+  <span class="kw">if</span> (<span class="id">p</span>.<span class="id">rotation</span>) <span class="id">ctx</span>.<span class="fn">rotate</span>(<span class="id">p</span>.<span class="id">rotation</span> * Math.<span class="id">PI</span> / <span class="nu">180</span>);
+  <span class="id">ctx</span>.<span class="id">font</span>      = <span class="str">`${p.fontSize}px sans-serif`</span>;
+  <span class="id">ctx</span>.<span class="id">fillStyle</span> = <span class="str">"steelblue"</span>; <span class="cm">// pick any color per word</span>
+  <span class="id">ctx</span>.<span class="fn">fillText</span>(<span class="id">p</span>.<span class="id">text</span>, <span class="nu">0</span>, <span class="nu">0</span>);
+  <span class="id">ctx</span>.<span class="fn">restore</span>();
+}</pre>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  import { layout }                     from "../js/index.js";
+  import { generate, WeightDist }       from "../js/datasets.js";
+
+  const canvas  = document.getElementById("cloud");
+  const ctx     = canvas.getContext("2d");
+  const metaEl  = document.getElementById("meta");
+  const palette = ["#1f6feb","#238636","#a371f7","#db6d28","#cf222e","#9e6a03","#0891b2","#7c3aed"];
+
+  let currentN    = 50;
+  let currentMode = "pretty";
+  let seed        = 1;
+
+  function fontCfg(n, mode) {
+    if (mode === "fast") return { minFontSize: 6, maxFontSize: 16, padding: 1 };
+    if (n <= 50)         return { minFontSize: 16, maxFontSize: 88, padding: 2 };
+    return                      { minFontSize: 10, maxFontSize: 52, padding: 2 };
+  }
+
+  function draw(placements) {
+    ctx.textAlign    = "center";
+    ctx.textBaseline = "middle";
+    placements.forEach((p, i) => {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      if (p.rotation) ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.font      = `${p.fontSize}px sans-serif`;
+      ctx.fillStyle = palette[i % palette.length];
+      ctx.fillText(p.text, 0, 0);
+      ctx.restore();
+    });
+  }
+
+  async function render(n, mode, s) {
+    metaEl.textContent = "laying out…";
+    document.querySelectorAll(".btn").forEach(b => b.disabled = true);
+
+    const w = Math.floor(canvas.getBoundingClientRect().width) || 800;
+    // Lay out into a landscape area that fits the panel — the canvas renders at
+    // the panel width, so keeping height a fraction of width avoids a long scroll.
+    const h = Math.round(w * (n >= 5000 ? 0.56 : n >= 500 ? 0.75 : 0.65));
+
+    canvas.width  = w;
+    canvas.height = h;
+
+    const items = generate(n, WeightDist.Zipf, s);
+    const cfg   = { width: w, height: h, ...fontCfg(n, mode) };
+
+    const t0 = performance.now();
+    const placements = await layout(items, { mode, ...cfg });
+    const ms = (performance.now() - t0).toFixed(1);
+
+    draw(placements);
+
+    metaEl.textContent = `${placements.length}/${items.length} placed · ${mode} · ${ms} ms`;
+    document.querySelectorAll(".btn").forEach(b => b.disabled = false);
+  }
+
+  document.querySelectorAll(".size-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentN    = Number(btn.dataset.n);
+      currentMode = btn.dataset.mode;
+      seed = 1;
+      render(currentN, currentMode, seed);
+    });
+  });
+
+  document.getElementById("rerender").addEventListener("click", (e) => {
+    seed = Math.floor(Math.random() * 0xffff) + 2;
+    const btn = e.currentTarget;
+    btn.classList.remove("flashing");
+    void btn.offsetWidth;            // restart the flash animation if mid-run
+    btn.classList.add("flashing");
+    render(currentN, currentMode, seed);
+  });
+
+  render(currentN, currentMode, seed);
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+[package]
+name = "wordcloud_layout"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance WASM layout engine for word clouds and general visualization layouts"
+license = "MIT"
+authors = ["Rugved Sawaratkar"]
+repository = "https://github.com/rugsaw/wordcloud-wasm"
+keywords = ["wordcloud", "wasm", "webassembly", "layout", "visualization"]
+categories = ["wasm", "visualization", "graphics"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+# Optional data-parallelism for the embarrassingly-parallel stages (mask
+# rasterization). Off by default; enabled by the `parallel` feature.
+rayon = { version = "1", optional = true }
+
+# `wasm-bindgen-rayon` wires Rayon's thread pool onto Web Workers +
+# SharedArrayBuffer. It only exists for wasm32 and is pulled in by the
+# `wasm-threads` feature (which also requires a threaded build — see README).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-rayon = { version = "1.2", optional = true }
+
+[features]
+# Parallelize mask generation with Rayon. Works natively (OS threads) and, on
+# wasm32, with `wasm-threads` (Web Worker pool). Single-threaded when off.
+parallel = ["dep:rayon"]
+# Threaded wasm build: `parallel` + the Web Worker pool initializer. Requires a
+# nightly toolchain + atomics/bulk-memory target features (see README).
+wasm-threads = ["parallel", "dep:wasm-bindgen-rayon"]
+
+[dev-dependencies]
+serde_json = "1"
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "layout"
+harness = false
+
+[profile.release]
+# Optimize the generated wasm for size and speed.
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

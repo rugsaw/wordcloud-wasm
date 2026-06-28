@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Treemap — wordcloud-wasm</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-back" href="../">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06z"/></svg>
+    wordcloud-wasm
+  </a>
+  <span class="nav-sep">/</span>
+  <span class="nav-title">Treemap</span>
+</nav>
+
+<div class="page">
+
+  <div class="section">
+    <h2>Treemap — same engine, different layout</h2>
+    <p class="section-sub">
+      The <code>LayoutEngine</code> trait is generic over input, config, and output types.
+      <code>treemap()</code> is a fully-implemented strategy that tiles the canvas into
+      rectangles whose areas are proportional to weight (squarified algorithm) — no overlaps,
+      no gaps. Same <code>{ text, weight }</code> input, rectangle output.
+    </p>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>treemap.html</span>
+      </div>
+      <div class="panel-body">
+        <canvas id="map" class="dark"></canvas>
+        <div class="controls-below">
+          <span class="meta" id="meta"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Code</h2>
+    <div class="code-block">
+      <div class="code-block-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>your-app.js</span>
+      </div>
+      <pre><span class="kw">import</span> { <span class="id">treemap</span> } <span class="kw">from</span> <span class="str">"./js/index.js"</span>;
+
+<span class="kw">const</span> <span class="id">rects</span> = <span class="kw">await</span> <span class="fn">treemap</span>(
+  [
+    { <span class="id">text</span>: <span class="str">"WebAssembly"</span>, <span class="id">weight</span>: <span class="nu">100</span> },
+    { <span class="id">text</span>: <span class="str">"Rust"</span>,        <span class="id">weight</span>: <span class="nu">78</span>  },
+    { <span class="id">text</span>: <span class="str">"layout"</span>,      <span class="id">weight</span>: <span class="nu">60</span>  },
+    <span class="cm">/* … */</span>
+  ],
+  { <span class="id">width</span>: <span class="nu">960</span>, <span class="id">height</span>: <span class="nu">540</span> },
+);
+<span class="cm">// → [{ text, value, x, y, width, height }, ...]</span>
+<span class="cm">// x/y are top-left corner (unlike word-cloud placements, which are centered).</span>
+
+<span class="kw">const</span> <span class="id">ctx</span> = <span class="id">canvas</span>.<span class="fn">getContext</span>(<span class="str">"2d"</span>);
+<span class="id">ctx</span>.<span class="id">textBaseline</span> = <span class="str">"top"</span>;
+
+<span class="kw">for</span> (<span class="kw">const</span> <span class="id">r</span> <span class="kw">of</span> <span class="id">rects</span>) {
+  <span class="id">ctx</span>.<span class="id">fillStyle</span> = <span class="str">"steelblue"</span>;
+  <span class="cm">// 1 px inset so tile borders read as a grid</span>
+  <span class="id">ctx</span>.<span class="fn">fillRect</span>(<span class="id">r</span>.<span class="id">x</span> + <span class="nu">1</span>, <span class="id">r</span>.<span class="id">y</span> + <span class="nu">1</span>, <span class="id">r</span>.<span class="id">width</span> - <span class="nu">2</span>, <span class="id">r</span>.<span class="id">height</span> - <span class="nu">2</span>);
+
+  <span class="kw">if</span> (<span class="id">r</span>.<span class="id">width</span> > <span class="nu">34</span> && <span class="id">r</span>.<span class="id">height</span> > <span class="nu">16</span>) {
+    <span class="id">ctx</span>.<span class="id">fillStyle</span> = <span class="str">"rgba(255,255,255,0.9)"</span>;
+    <span class="id">ctx</span>.<span class="id">font</span> = <span class="str">"13px system-ui, sans-serif"</span>;
+    <span class="id">ctx</span>.<span class="fn">fillText</span>(<span class="id">r</span>.<span class="id">text</span>, <span class="id">r</span>.<span class="id">x</span> + <span class="nu">6</span>, <span class="id">r</span>.<span class="id">y</span> + <span class="nu">6</span>);
+  }
+}</pre>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  import { treemap } from "../js/index.js";
+
+  const canvas  = document.getElementById("map");
+  const ctx     = canvas.getContext("2d");
+  const metaEl  = document.getElementById("meta");
+  const palette = ["#1f6feb","#238636","#a371f7","#db6d28","#cf222e","#9e6a03","#0891b2","#7c3aed"];
+
+  const DATA = [
+    ["WebAssembly", 100], ["Rust", 78], ["layout", 60], ["engine", 52],
+    ["treemap", 44], ["bitmap", 38], ["spiral", 34], ["grid", 30],
+    ["mask", 26], ["fast", 22], ["pretty", 20], ["balanced", 18],
+    ["canvas", 15], ["wasm", 13], ["render", 11], ["packing", 9],
+    ["weight", 7], ["pixels", 5], ["node", 4], ["edge", 3],
+  ];
+  const items = DATA.map(([text, weight]) => ({ text, weight }));
+
+  const w = Math.floor(canvas.getBoundingClientRect().width) || 800;
+  canvas.width  = w;
+  canvas.height = Math.round(w * 0.55);
+
+  try {
+    const rects = await treemap(items, { width: canvas.width, height: canvas.height });
+    ctx.textBaseline = "top";
+    rects.forEach((r, i) => {
+      ctx.fillStyle = palette[i % palette.length];
+      ctx.fillRect(r.x + 1, r.y + 1, Math.max(0, r.width - 2), Math.max(0, r.height - 2));
+      if (r.width > 34 && r.height > 16) {
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        ctx.font = "13px system-ui, sans-serif";
+        ctx.fillText(r.text, r.x + 6, r.y + 6);
+      }
+    });
+    metaEl.textContent = `${rects.length} tiles · squarified · areas ∝ weight`;
+  } catch (err) {
+    metaEl.textContent = `error: ${err.message}`;
+  }
+</script>
+</body>
+</html>

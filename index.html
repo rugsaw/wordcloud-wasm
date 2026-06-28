@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>wordcloud-wasm — Rust + WASM layout engine</title>
+  <meta name="description" content="A Rust + WebAssembly layout engine for word clouds and visualizations. Runs off the main thread. 50 to 50,000+ words." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --bg:      #0d1117;
+      --bg2:     #161b22;
+      --bg3:     #21262d;
+      --border:  #30363d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --blue:    #1f6feb;
+      --blue2:   #388bfd;
+      --green:   #3fb950;
+      --purple:  #a371f7;
+      --orange:  #db6d28;
+      --red:     #f85149;
+      --cyan:    #79c0ff;
+    }
+
+    /* Offset in-page anchor jumps so the sticky nav doesn't cover section headers. */
+    html { scroll-padding-top: 64px; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+    }
+
+    a { color: var(--blue2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Nav ─────────────────────────────────────────────── */
+    nav {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; gap: 16px;
+      padding: 12px 24px;
+      background: rgba(13,17,23,0.92);
+      backdrop-filter: blur(6px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .brand { font-weight: 700; font-size: 15px; color: var(--text); }
+    nav .brand span { color: var(--cyan); }
+    nav .spacer { flex: 1; }
+    nav a { font-size: 14px; color: var(--muted); }
+    nav a:hover { color: var(--text); text-decoration: none; }
+    .gh-link {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg3); color: var(--text) !important;
+      font-size: 13px;
+    }
+    .gh-link:hover { border-color: var(--blue2); }
+
+    /* ── Hero ────────────────────────────────────────────── */
+    .hero {
+      padding: 56px 24px 40px;
+      text-align: center;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .hero h1 {
+      font-size: clamp(28px, 5vw, 44px);
+      font-weight: 800;
+      margin: 0 0 16px;
+      letter-spacing: -0.5px;
+    }
+    .hero h1 span { color: var(--cyan); }
+    .hero p {
+      font-size: 18px;
+      color: var(--muted);
+      max-width: 600px;
+      margin: 0 auto 32px;
+    }
+    .badges {
+      display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+    .badge {
+      font-size: 13px; padding: 4px 12px; border-radius: 20px;
+      border: 1px solid var(--border); background: var(--bg2);
+      color: var(--muted);
+    }
+    .badge strong { color: var(--text); }
+
+    /* ── Section layout ──────────────────────────────────── */
+    section {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 24px 64px;
+    }
+    h2 {
+      font-size: 22px; font-weight: 700;
+      margin: 0 0 6px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-sub {
+      color: var(--muted); font-size: 14px;
+      margin: 0 0 24px;
+    }
+
+    /* ── Demo panel ──────────────────────────────────────── */
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 700px) { .demo-grid { grid-template-columns: 1fr; } }
+
+    .demo-panel {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .demo-panel-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      font-size: 13px; color: var(--muted);
+    }
+    .demo-panel-header .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--border);
+    }
+    .demo-panel-header .dot.r { background: #ff5f57; }
+    .demo-panel-header .dot.y { background: #febc2e; }
+    .demo-panel-header .dot.g { background: #28c840; }
+    .demo-panel-body { padding: 16px; }
+
+    /* Canvas wrapper — scrollable for large datasets */
+    .canvas-scroll-wrap {
+      max-height: 520px;
+      overflow-y: auto;
+      border-radius: 6px;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      background: #fff;
+    }
+    canvas.dark-bg { background: var(--bg); }
+
+    .controls {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .btn {
+      font: inherit; cursor: pointer;
+      padding: 5px 14px; border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg3); color: var(--text);
+      font-size: 13px; transition: border-color 0.15s;
+    }
+    .btn:hover { border-color: var(--blue2); }
+    .btn.active { background: var(--blue); border-color: var(--blue2); color: #fff; }
+    .btn:disabled { opacity: 0.5; cursor: default; }
+    .btn.flashing { animation: btn-flash 0.45s ease; }
+    .meta { font-size: 12px; color: var(--muted); margin-left: 4px; }
+    @keyframes btn-flash {
+      0%   { background: var(--blue);  border-color: var(--blue2); color: #fff; }
+      100% { background: var(--bg3);   border-color: var(--border); color: var(--text); }
+    }
+
+    /* ── Code block ──────────────────────────────────────── */
+    .code-block {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .code-block-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px; color: var(--muted);
+    }
+    .code-block-header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+    .code-block-header .dot.r { background: #ff5f57; }
+    .code-block-header .dot.y { background: #febc2e; }
+    .code-block-header .dot.g { background: #28c840; }
+    pre {
+      margin: 0;
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.65;
+      font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+    }
+    /* Syntax colours */
+    .kw  { color: #ff7b72; }
+    .fn  { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .cm  { color: #8b949e; font-style: italic; }
+    .nu  { color: #79c0ff; }
+    .id  { color: #ffa657; }
+    .op  { color: #e6edf3; }
+
+    /* ── Performance table ───────────────────────────────── */
+    .perf-table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      text-align: right;
+    }
+    th:first-child, td:first-child { text-align: left; }
+    thead th { background: var(--bg3); color: var(--muted); font-weight: 600; font-size: 12px; }
+    .tag-fast   { color: var(--green); font-weight: 600; }
+    .tag-pretty { color: var(--purple); font-weight: 600; }
+    .tag-d3     { color: var(--muted); }
+    .win { color: var(--green); }
+    .note-row td { color: var(--muted); font-size: 12px; font-style: italic; border-top-style: dashed; }
+
+    /* ── How it works: numbered steps ────────────────────── */
+    .steps { display: grid; gap: 18px; }
+    .step  { display: flex; gap: 16px; align-items: flex-start; }
+    .step-num {
+      flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--blue2); font-size: 14px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .step h3 { font-size: 16px; margin: 3px 0 4px; }
+    .step p  { font-size: 14px; color: var(--muted); margin: 0; }
+
+    /* ── Example links ───────────────────────────────────── */
+    .example-links {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .example-link {
+      display: block;
+      padding: 16px 20px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text) !important;
+      transition: border-color 0.15s;
+      text-decoration: none !important;
+    }
+    .example-link:hover { border-color: var(--blue2); }
+    .example-link .el-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .example-link .el-desc  { font-size: 12px; color: var(--muted); }
+
+    /* ── Footer ──────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 32px 24px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* ── Worker status spinner ───────────────────────────── */
+    .spin {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="brand">wordcloud<span>-wasm</span></span>
+  <span class="spacer"></span>
+  <a href="#demo">Demo</a>
+  <a href="#treemap">Treemap</a>
+  <a href="#perf">Performance</a>
+  <a href="#how">How it works</a>
+  <a class="gh-link" href="https://github.com/rugsaw/wordcloud-wasm" target="_blank" rel="noopener">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    GitHub
+  </a>
+</nav>
+
+<!-- ── Hero ──────────────────────────────────────────────── -->
+<div class="hero">
+  <h1>Rust + WebAssembly<br><span>layout engine</span></h1>
+  <p>
+    Places word clouds and other visualizations <strong>off the main thread</strong>,
+    scaling from 50 to 50 000+ words. Framework-agnostic — your code does the drawing.
+  </p>
+  <div class="badges">
+    <span class="badge"><strong>~1 ms</strong> for 100 words (Fast)</span>
+    <span class="badge"><strong>~88 ms</strong> for 50 000 words</span>
+    <span class="badge"><strong>~120×</strong> faster than d3-cloud</span>
+    <span class="badge">Web Worker ready</span>
+    <span class="badge">No bundler needed</span>
+  </div>
+</div>
+
+<!-- ── Live demo ─────────────────────────────────────────── -->
+<section id="demo">
+  <h2>Live demo</h2>
+  <p class="section-sub">Runs in-browser via WebAssembly — no server-side computation.</p>
+
+  <div class="demo-grid">
+    <!-- Canvas -->
+    <div class="demo-panel">
+      <div class="demo-panel-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>canvas.html</span>
+      </div>
+      <div class="demo-panel-body">
+        <div class="canvas-scroll-wrap" id="cloud-canvas-wrap">
+          <canvas id="cloud-canvas"></canvas>
+        </div>
+        <div class="controls">
+          <button class="btn size-btn active" data-n="50"   data-mode="pretty">50 words</button>
+          <button class="btn size-btn"        data-n="500"  data-mode="pretty">500 words</button>
+          <button class="btn size-btn"        data-n="5000" data-mode="fast"  >5 000 words</button>
+          <button class="btn" id="rerender">Re-render</button>
+          <span class="meta" id="cloud-meta"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Code -->
+    <div class="code-block">
+      <div class="code-block-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>your-app.js</span>
+      </div>
+      <pre><span class="cm">// One async call. No bundler needed.</span>
+<span class="kw">import</span> { <span class="id">layout</span> } <span class="kw">from</span> <span class="str">"./js/index.js"</span>;
+
+<span class="kw">const</span> <span class="id">items</span> = [
+  { <span class="id">text</span>: <span class="str">"WebAssembly"</span>, <span class="id">weight</span>: <span class="nu">100</span> },
+  { <span class="id">text</span>: <span class="str">"Rust"</span>,        <span class="id">weight</span>: <span class="nu">80</span>  },
+  { <span class="id">text</span>: <span class="str">"layout"</span>,      <span class="id">weight</span>: <span class="nu">40</span>  },
+];
+
+<span class="kw">const</span> <span class="id">placements</span> = <span class="kw">await</span> <span class="fn">layout</span>(<span class="id">items</span>, {
+  <span class="id">mode</span>:        <span class="str">"pretty"</span>,  <span class="cm">// "pretty" | "balanced" | "fast"</span>
+  <span class="id">width</span>:       <span class="nu">960</span>,
+  <span class="id">height</span>:      <span class="nu">600</span>,
+  <span class="id">minFontSize</span>: <span class="nu">14</span>,
+  <span class="id">maxFontSize</span>: <span class="nu">88</span>,
+  <span class="id">padding</span>:     <span class="nu">2</span>,
+});
+<span class="cm">// → [{ text, x, y, rotation, fontSize }, ...]</span>
+<span class="cm">// x/y are bbox center — render with center anchoring.</span>
+
+<span class="kw">const</span> <span class="id">ctx</span> = <span class="id">canvas</span>.<span class="fn">getContext</span>(<span class="str">"2d"</span>);
+<span class="id">ctx</span>.<span class="id">textAlign</span>    = <span class="str">"center"</span>;
+<span class="id">ctx</span>.<span class="id">textBaseline</span> = <span class="str">"middle"</span>;
+<span class="kw">for</span> (<span class="kw">const</span> <span class="id">p</span> <span class="kw">of</span> <span class="id">placements</span>) {
+  <span class="id">ctx</span>.<span class="fn">save</span>();
+  <span class="id">ctx</span>.<span class="fn">translate</span>(<span class="id">p</span>.<span class="id">x</span>, <span class="id">p</span>.<span class="id">y</span>);
+  <span class="kw">if</span> (<span class="id">p</span>.<span class="id">rotation</span>) <span class="id">ctx</span>.<span class="fn">rotate</span>(<span class="id">p</span>.<span class="id">rotation</span> * Math.<span class="id">PI</span> / <span class="nu">180</span>);
+  <span class="id">ctx</span>.<span class="id">font</span> = <span class="str">`<span class="id">${p.fontSize}</span>px sans-serif`</span>;
+  <span class="id">ctx</span>.<span class="fn">fillText</span>(<span class="id">p</span>.<span class="id">text</span>, <span class="nu">0</span>, <span class="nu">0</span>);
+  <span class="id">ctx</span>.<span class="fn">restore</span>();
+}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ── Web Worker demo ────────────────────────────────────── -->
+<section id="worker">
+  <h2>Off the main thread</h2>
+  <p class="section-sub">Layout runs in a Web Worker — the spinner below never stops, proving the UI stays responsive.</p>
+
+  <div class="demo-grid">
+    <div class="demo-panel">
+      <div class="demo-panel-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>Web Worker demo</span>
+        <span class="spin" style="margin-left:auto" title="main thread stays responsive"></span>
+      </div>
+      <div class="demo-panel-body">
+        <div class="canvas-scroll-wrap">
+          <canvas id="worker-canvas"></canvas>
+        </div>
+        <div class="controls">
+          <button class="btn worker-size-btn active" data-n="24"   data-mode="pretty">24 words</button>
+          <button class="btn worker-size-btn"        data-n="500"  data-mode="pretty">500 words</button>
+          <button class="btn worker-size-btn"        data-n="5000" data-mode="fast"  >5 000 words</button>
+          <button class="btn" id="worker-run">Re-run layout</button>
+          <span class="meta" id="worker-meta">idle</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-block-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>worker-app.js</span>
+      </div>
+      <pre><span class="cm">// Layout runs on a dedicated Worker.</span>
+<span class="cm">// Concurrent calls are safe — request IDs are matched.</span>
+<span class="kw">import</span> { <span class="id">createLayoutClient</span> } <span class="kw">from</span> <span class="str">"./js/client.js"</span>;
+
+<span class="kw">const</span> <span class="id">client</span> = <span class="fn">createLayoutClient</span>();
+
+<span class="kw">const</span> <span class="id">placements</span> = <span class="kw">await</span> <span class="id">client</span>.<span class="fn">layout</span>(<span class="id">items</span>, {
+  <span class="id">mode</span>:   <span class="str">"pretty"</span>,
+  <span class="id">width</span>:  <span class="nu">960</span>,
+  <span class="id">height</span>: <span class="nu">600</span>,
+});
+
+<span class="cm">// Render exactly as before — x/y are still bbox centers.</span>
+<span class="cm">// Call client.terminate() when you're done with the worker.</span>
+<span class="id">client</span>.<span class="fn">terminate</span>();</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ── Treemap demo ───────────────────────────────────────── -->
+<section id="treemap">
+  <h2>Treemap — same engine, different layout</h2>
+  <p class="section-sub">
+    The <code style="color:var(--cyan)">LayoutEngine</code> trait is generic. Treemap is a fully-implemented
+    strategy with its own output type — areas proportional to weight, no overlaps.
+  </p>
+
+  <div class="demo-grid">
+    <div class="demo-panel">
+      <div class="demo-panel-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>treemap.html</span>
+      </div>
+      <div class="demo-panel-body">
+        <div class="canvas-scroll-wrap">
+          <canvas id="treemap-canvas" class="dark-bg"></canvas>
+        </div>
+        <div class="controls">
+          <span class="meta" id="treemap-meta"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-block-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>treemap-app.js</span>
+      </div>
+      <pre><span class="kw">import</span> { <span class="id">treemap</span> } <span class="kw">from</span> <span class="str">"./js/index.js"</span>;
+
+<span class="kw">const</span> <span class="id">rects</span> = <span class="kw">await</span> <span class="fn">treemap</span>(
+  [
+    { <span class="id">text</span>: <span class="str">"Rust"</span>,   <span class="id">weight</span>: <span class="nu">78</span> },
+    { <span class="id">text</span>: <span class="str">"wasm"</span>,   <span class="id">weight</span>: <span class="nu">40</span> },
+    { <span class="id">text</span>: <span class="str">"layout"</span>, <span class="id">weight</span>: <span class="nu">30</span> },
+    <span class="cm">/* … */</span>
+  ],
+  { <span class="id">width</span>: <span class="nu">960</span>, <span class="id">height</span>: <span class="nu">600</span> },
+);
+<span class="cm">// → [{ text, value, x, y, width, height }, ...]</span>
+<span class="cm">// x/y are top-left — render with fillRect.</span>
+
+<span class="kw">const</span> <span class="id">ctx</span> = <span class="id">canvas</span>.<span class="fn">getContext</span>(<span class="str">"2d"</span>);
+<span class="kw">for</span> (<span class="kw">const</span> <span class="id">r</span> <span class="kw">of</span> <span class="id">rects</span>) {
+  <span class="id">ctx</span>.<span class="fn">fillRect</span>(<span class="id">r</span>.<span class="id">x</span>, <span class="id">r</span>.<span class="id">y</span>, <span class="id">r</span>.<span class="id">width</span>, <span class="id">r</span>.<span class="id">height</span>);
+}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ── Performance ───────────────────────────────────────── -->
+<section id="perf">
+  <h2>Performance</h2>
+  <p class="section-sub">
+    Host CPU, scalar kernels, release build. Identical deterministic inputs for both engines (Zipf weights, seed 1).
+    Full methodology in <a href="BENCHMARKS.md">BENCHMARKS.md</a>.
+  </p>
+
+  <div class="perf-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Mode</th><th>Words</th>
+          <th>Median (ms)</th><th>d3-cloud (ms)</th><th>Speedup</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="tag-fast">Fast</span></td><td>100</td>
+          <td class="win">0.97</td><td class="tag-d3">112</td><td class="win">~120×</td>
+        </tr>
+        <tr>
+          <td><span class="tag-pretty">Pretty</span></td><td>100</td>
+          <td class="win">11</td><td class="tag-d3">112</td><td class="win">~10×</td>
+        </tr>
+        <tr>
+          <td><span class="tag-fast">Fast</span></td><td>500</td>
+          <td class="win">2.6</td><td class="tag-d3">384</td><td class="win">~150×</td>
+        </tr>
+        <tr>
+          <td><span class="tag-pretty">Pretty</span></td><td>500</td>
+          <td>173</td><td class="tag-d3">384</td><td class="win">~2.2×</td>
+        </tr>
+        <tr>
+          <td><span class="tag-fast">Fast</span></td><td>5 000</td>
+          <td class="win">14</td><td class="tag-d3">2 551</td><td class="win">~180×</td>
+        </tr>
+        <tr>
+          <td><span class="tag-fast">Fast</span></td><td>50 000</td>
+          <td class="win">88</td><td class="tag-d3">—</td><td>—</td>
+        </tr>
+        <tr class="note-row">
+          <td colspan="5">
+            Fairness caveat: d3-cloud measures real glyph outlines; this engine uses approximate
+            advance-width boxes — part of d3-cloud's cost is work this engine currently skips.
+            Both single-threaded. Parallel rasterization (~2× for Fast at 50k) is on the roadmap.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── How it works ──────────────────────────────────────── -->
+<section id="how">
+  <h2>How it works</h2>
+  <p class="section-sub">
+    You hand the engine a list of words; it hands back coordinates. The calculation (steps
+    1–3) runs entirely in WebAssembly; the drawing happens outside it, in whatever renderer
+    you choose — Canvas, SVG, D3, React, or any charting tool that can place text.
+  </p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <h3>Give it words and weights</h3>
+        <p>The input is a list of <code>{ text, weight }</code>. A word's weight decides how
+           big it should be — the heaviest word becomes the largest, the rest scale down from there.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <h3>Turn each word into a shape</h3>
+        <p>Every word is drawn once at its target size and traced into a compact black-and-white
+           stencil of the pixels it covers. This is the only step that touches fonts, and the
+           words are processed in parallel across CPU cores.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <h3>Pack the shapes without overlap</h3>
+        <p>Each word spirals outward from the center looking for a gap. To check a spot, its
+           stencil is compared against a single map of pixels already taken — a fast bitwise test
+           that stays quick even at tens of thousands of words. A <strong>mode</strong> tunes this:
+           <strong>Pretty</strong> for a tight spiral look, <strong>Fast</strong> for huge counts,
+           <strong>Balanced</strong> in between.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div>
+        <h3>Get back coordinates to draw</h3>
+        <p>The result is <code>{ x, y, rotation, fontSize }</code> for each placed word — position
+           only, no pixels. You draw it however you like (Canvas, SVG, D3, React…). Run the whole
+           thing in a Web Worker and the page never freezes, even for 50 000 words.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Examples ──────────────────────────────────────────── -->
+<section id="examples">
+  <h2>Examples</h2>
+  <p class="section-sub">Full standalone pages — serve the repo root over HTTP and open them directly.</p>
+
+  <div class="example-links">
+    <a class="example-link" href="examples/canvas.html">
+      <div class="el-title">Canvas renderer</div>
+      <div class="el-desc">Word cloud on a &lt;canvas&gt;. Small / medium / large presets with re-roll.</div>
+    </a>
+    <a class="example-link" href="examples/worker.html">
+      <div class="el-title">Web Worker</div>
+      <div class="el-desc">Off-main-thread layout. A CSS spinner proves the UI never freezes.</div>
+    </a>
+    <a class="example-link" href="examples/treemap.html">
+      <div class="el-title">Treemap</div>
+      <div class="el-desc">Squarified treemap via the same LayoutEngine trait, different output type.</div>
+    </a>
+  </div>
+</section>
+
+<footer>
+  <p>
+    <a href="https://github.com/rugsaw/wordcloud-wasm" target="_blank" rel="noopener">wordcloud-wasm</a>
+    · MIT License · Built with Rust + WebAssembly
+  </p>
+  <p style="margin-top:4px">
+    <a href="https://github.com/rugsaw/wordcloud-wasm/blob/main/BENCHMARKS.md" target="_blank" rel="noopener">Benchmarks</a> ·
+    <a href="https://github.com/rugsaw/wordcloud-wasm#readme" target="_blank" rel="noopener">README</a>
+  </p>
+</footer>
+
+<script type="module">
+  import { layout, treemap } from "./js/index.js";
+  import { createLayoutClient } from "./js/client.js";
+  import { generate, WeightDist } from "./js/datasets.js";
+
+  const palette = ["#1f6feb","#238636","#a371f7","#db6d28","#cf222e","#9e6a03","#0891b2","#7c3aed"];
+
+  function displayFontCfg(n, mode) {
+    if (mode === "fast") return { minFontSize: 6, maxFontSize: 16, padding: 1 };
+    if (n <= 50)         return { minFontSize: 16, maxFontSize: 88, padding: 2 };
+    return                      { minFontSize: 10, maxFontSize: 52, padding: 2 };
+  }
+
+  function drawPlacements(ctx, placements) {
+    ctx.textAlign    = "center";
+    ctx.textBaseline = "middle";
+    placements.forEach((p, i) => {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      if (p.rotation) ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.font      = `${p.fontSize}px sans-serif`;
+      ctx.fillStyle = palette[i % palette.length];
+      ctx.fillText(p.text, 0, 0);
+      ctx.restore();
+    });
+  }
+
+  // ── Word cloud demo ──────────────────────────────────────
+  const cloudCanvas = document.getElementById("cloud-canvas");
+  const cloudCtx    = cloudCanvas.getContext("2d");
+  const cloudMeta   = document.getElementById("cloud-meta");
+  let currentN    = 50;
+  let currentMode = "pretty";
+  let seed = 1;
+
+  async function renderCloud(n, mode, s) {
+    cloudMeta.textContent = "laying out…";
+    document.querySelectorAll(".btn").forEach(b => b.disabled = true);
+
+    const w = Math.floor(cloudCanvas.getBoundingClientRect().width);
+    if (!w) { document.querySelectorAll(".btn").forEach(b => b.disabled = false); return; }
+
+    const fontCfg = displayFontCfg(n, mode);
+    // Lay out into a landscape area that fits the panel — the canvas renders at
+    // the panel width, so keeping height a fraction of width avoids a long scroll.
+    const h = Math.round(w * (n >= 5000 ? 0.56 : n >= 500 ? 0.75 : 0.65));
+
+    cloudCanvas.width  = w;
+    cloudCanvas.height = h;
+
+    const items = generate(n, WeightDist.Zipf, s);
+    const t0 = performance.now();
+    const placements = await layout(items, { mode, width: w, height: h, ...fontCfg });
+    const ms = (performance.now() - t0).toFixed(1);
+
+    // Trim canvas to the actual bounding box of placed words (skip for the dense
+    // 5000-word cloud, which already fills its compact landscape area).
+    if (n < 5000 && placements.length > 0) {
+      const maxY = Math.max(...placements.map(p => p.y + p.fontSize));
+      cloudCanvas.height = Math.ceil(maxY) + 20;
+    }
+
+    drawPlacements(cloudCtx, placements);
+    cloudMeta.textContent = `${placements.length}/${n} placed · ${mode} · ${ms} ms`;
+    document.querySelectorAll(".btn").forEach(b => b.disabled = false);
+  }
+
+  document.querySelectorAll(".size-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentN    = Number(btn.dataset.n);
+      currentMode = btn.dataset.mode;
+      seed = 1;
+      renderCloud(currentN, currentMode, seed);
+    });
+  });
+  document.getElementById("rerender").addEventListener("click", (e) => {
+    seed = Math.floor(Math.random() * 0xffff) + 2;
+    const btn = e.currentTarget;
+    btn.classList.remove("flashing");
+    void btn.offsetWidth;            // restart the flash animation if mid-run
+    btn.classList.add("flashing");
+    renderCloud(currentN, currentMode, seed);
+  });
+  renderCloud(currentN, currentMode, seed);
+
+  // ── Worker demo ──────────────────────────────────────────
+  const workerCanvas = document.getElementById("worker-canvas");
+  const workerCtx    = workerCanvas.getContext("2d");
+  const workerMeta   = document.getElementById("worker-meta");
+
+  // Curated list used for the default 24-word view; larger presets are generated.
+  const WORKER_WORDS = [
+    ["WebAssembly", 100], ["Rust", 92], ["layout", 70], ["engine", 64],
+    ["canvas", 55], ["spiral", 50], ["bitmap", 48], ["mask", 44],
+    ["collision", 40], ["occupancy", 38], ["render", 34], ["weight", 30],
+    ["font", 28], ["pretty", 26], ["fast", 24], ["balanced", 22],
+    ["grid", 20], ["pixels", 18], ["word", 16], ["cloud", 14],
+    ["vector", 12], ["packing", 11], ["wasm", 10], ["speed", 9],
+  ];
+  const workerShowcase = WORKER_WORDS.map(([text, weight]) => ({ text, weight }));
+
+  const client = createLayoutClient();
+
+  let workerN    = 24;
+  let workerMode = "pretty";
+  let workerSeed = 1;
+
+  function workerItemsFor(n) {
+    return n <= 24 ? workerShowcase : generate(n, WeightDist.Zipf, workerSeed);
+  }
+
+  async function runWorker() {
+    workerMeta.textContent = "laying out on worker…";
+    const w = Math.floor(workerCanvas.getBoundingClientRect().width);
+    if (!w) return;
+    // Landscape area that fits the panel — keeps even the 5000-word cloud on-screen.
+    const ratio = workerN >= 5000 ? 0.56 : workerN >= 500 ? 0.6 : 0.55;
+    const h = Math.round(w * ratio);
+    workerCanvas.width  = w;
+    workerCanvas.height = h;
+
+    const items = workerItemsFor(workerN);
+    document.querySelectorAll(".btn").forEach(b => b.disabled = true);
+    const t0 = performance.now();
+    try {
+      const placements = await client.layout(items, {
+        mode: workerMode, width: w, height: h,
+        ...displayFontCfg(workerN, workerMode),
+      });
+      workerCtx.clearRect(0, 0, w, h);
+      drawPlacements(workerCtx, placements);
+      const ms = (performance.now() - t0).toFixed(1);
+      workerMeta.textContent = `${placements.length}/${items.length} placed · ${workerMode} · ${ms} ms (off-thread)`;
+    } catch (err) {
+      workerMeta.textContent = `error: ${err.message}`;
+    }
+    document.querySelectorAll(".btn").forEach(b => b.disabled = false);
+  }
+
+  document.querySelectorAll(".worker-size-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".worker-size-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      workerN    = Number(btn.dataset.n);
+      workerMode = btn.dataset.mode;
+      workerSeed = 1;
+      runWorker();
+    });
+  });
+
+  document.getElementById("worker-run").addEventListener("click", runWorker);
+  runWorker();
+
+  // ── Treemap demo ─────────────────────────────────────────
+  const tmCanvas = document.getElementById("treemap-canvas");
+  const tmCtx    = tmCanvas.getContext("2d");
+  const tmMeta   = document.getElementById("treemap-meta");
+
+  const TM_DATA = [
+    ["WebAssembly", 100], ["Rust", 78], ["layout", 60], ["engine", 52],
+    ["treemap", 44], ["bitmap", 38], ["spiral", 34], ["grid", 30],
+    ["mask", 26], ["fast", 22], ["pretty", 20], ["balanced", 18],
+    ["canvas", 15], ["wasm", 13], ["render", 11], ["packing", 9],
+    ["weight", 7], ["pixels", 5], ["node", 4], ["edge", 3],
+  ];
+  const tmItems = TM_DATA.map(([text, weight]) => ({ text, weight }));
+
+  async function renderTreemap() {
+    const w = Math.floor(tmCanvas.getBoundingClientRect().width);
+    if (!w) return;
+    const h = Math.round(w * 0.55);
+    tmCanvas.width  = w;
+    tmCanvas.height = h;
+    try {
+      const rects = await treemap(tmItems, { width: w, height: h });
+      tmCtx.textBaseline = "top";
+      rects.forEach((r, i) => {
+        tmCtx.fillStyle = palette[i % palette.length];
+        tmCtx.fillRect(r.x + 1, r.y + 1, Math.max(0, r.width - 2), Math.max(0, r.height - 2));
+        if (r.width > 34 && r.height > 16) {
+          tmCtx.fillStyle = "rgba(255,255,255,0.92)";
+          tmCtx.font = "13px system-ui, sans-serif";
+          tmCtx.fillText(r.text, r.x + 6, r.y + 6);
+        }
+      });
+      tmMeta.textContent = `${rects.length} tiles · squarified · areas ∝ weight`;
+    } catch (err) {
+      tmMeta.textContent = `error: ${err.message}`;
+    }
+  }
+
+  renderTreemap();
+</script>
+</body>
+</html>

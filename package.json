@@ -1,0 +1,51 @@
+{
+  "name": "wordcloud-wasm",
+  "version": "0.1.0",
+  "description": "High-performance WASM layout engine for word clouds and general visualization layouts",
+  "type": "module",
+  "license": "MIT",
+  "author": "Rugved Sawaratkar",
+  "homepage": "https://github.com/rugsaw/wordcloud-wasm#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rugsaw/wordcloud-wasm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rugsaw/wordcloud-wasm/issues"
+  },
+  "keywords": [
+    "wordcloud",
+    "wasm",
+    "webassembly",
+    "layout",
+    "visualization"
+  ],
+  "main": "./js/index.js",
+  "module": "./js/index.js",
+  "types": "./js/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./js/index.d.ts",
+      "default": "./js/index.js"
+    },
+    "./client": {
+      "types": "./js/client.d.ts",
+      "default": "./js/client.js"
+    },
+    "./worker": "./js/worker.js",
+    "./threads": "./js/threads.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "js/",
+    "pkg/wordcloud_layout.js",
+    "pkg/wordcloud_layout.d.ts",
+    "pkg/wordcloud_layout_bg.wasm",
+    "pkg/wordcloud_layout_bg.wasm.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}
