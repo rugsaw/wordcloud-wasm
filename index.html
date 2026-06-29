@@ -41,7 +41,8 @@
     /* ── Nav ─────────────────────────────────────────────── */
     nav {
       position: sticky; top: 0; z-index: 10;
-      display: flex; align-items: center; gap: 16px;
+      display: flex; align-items: center; flex-wrap: wrap;
+      gap: 16px;
       padding: 12px 24px;
       background: rgba(13,17,23,0.92);
       backdrop-filter: blur(6px);
@@ -49,7 +50,23 @@
     }
     nav .brand { font-weight: 700; font-size: 15px; color: var(--text); }
     nav .brand span { color: var(--cyan); }
-    nav .spacer { flex: 1; }
+    .nav-toggle {
+      display: none;
+      margin-left: auto;
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg3);
+      color: var(--text);
+      cursor: pointer;
+      line-height: 0;
+    }
+    .nav-toggle:hover { border-color: var(--blue2); }
+    .nav-toggle svg { display: block; }
+    .nav-links {
+      display: flex; align-items: center; gap: 16px;
+      flex: 1; justify-content: flex-end;
+    }
     nav a { font-size: 14px; color: var(--muted); }
     nav a:hover { color: var(--text); text-decoration: none; }
     .gh-link {
@@ -60,6 +77,33 @@
       font-size: 13px;
     }
     .gh-link:hover { border-color: var(--blue2); }
+
+    @media (max-width: 768px) {
+      html { scroll-padding-top: 56px; }
+      nav { padding: 10px 16px; gap: 0; }
+      .nav-toggle { display: flex; align-items: center; justify-content: center; }
+      .nav-links {
+        display: none;
+        flex: none;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        width: 100%;
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid var(--border);
+      }
+      nav.open .nav-links { display: flex; }
+      .nav-links a {
+        padding: 10px 4px;
+        font-size: 15px;
+      }
+      .nav-links .gh-link {
+        margin-top: 6px;
+        justify-content: center;
+        padding: 10px 12px;
+      }
+    }
 
     /* ── Hero ────────────────────────────────────────────── */
     .hero {
@@ -288,15 +332,21 @@
 
 <nav>
   <span class="brand">wordcloud<span>-wasm</span></span>
-  <span class="spacer"></span>
-  <a href="#demo">Demo</a>
-  <a href="#treemap">Treemap</a>
-  <a href="#perf">Performance</a>
-  <a href="#how">How it works</a>
-  <a class="gh-link" href="https://github.com/rugsaw/wordcloud-wasm" target="_blank" rel="noopener">
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-    GitHub
-  </a>
+  <button class="nav-toggle" type="button" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-menu">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/>
+    </svg>
+  </button>
+  <div class="nav-links" id="nav-menu">
+    <a href="#demo">Demo</a>
+    <a href="#treemap">Treemap</a>
+    <a href="#perf">Performance</a>
+    <a href="#how">How it works</a>
+    <a class="gh-link" href="https://github.com/rugsaw/wordcloud-wasm" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
 </nav>
 
 <!-- ── Hero ──────────────────────────────────────────────── -->
@@ -618,6 +668,25 @@
   </p>
 </footer>
 
+<script>
+  (function () {
+    const nav = document.querySelector("nav");
+    const toggle = document.querySelector(".nav-toggle");
+    if (!nav || !toggle) return;
+
+    toggle.addEventListener("click", () => {
+      const open = nav.classList.toggle("open");
+      toggle.setAttribute("aria-expanded", open);
+    });
+
+    nav.querySelectorAll(".nav-links a").forEach((link) => {
+      link.addEventListener("click", () => {
+        nav.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+      });
+    });
+  })();
+</script>
 <script type="module">
   import { layout, treemap } from "./js/index.js";
   import { createLayoutClient } from "./js/client.js";
