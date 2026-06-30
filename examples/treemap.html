@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Treemap — wordcloud-wasm</title>
+  <title>Building a treemap layout — wordcloud-wasm</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -20,63 +20,216 @@
 <div class="page">
 
   <div class="section">
-    <h2>Treemap — same engine, different layout</h2>
+    <h2>Treemaps — when rectangles beat words</h2>
+    <p class="guide-lead">
+      Not every weighted visualization needs scattered text. Treemaps tile the canvas into
+      rectangles whose areas reflect weight — no overlaps, no gaps, every category visible at
+      once. The same <code>{ text, weight }</code> input that feeds a word cloud feeds
+      <code>treemap()</code> too; only the output shape changes.
+    </p>
+
+    <div class="callout tip">
+      <strong>Coordinate model differs from word clouds.</strong> Treemap entries use
+      <code>(x, y)</code> as the <strong>top-left corner</strong> of each tile, plus
+      <code>width</code> and <code>height</code>. Word-cloud placements use the bbox
+      <strong>center</strong>. Mixing the two render paths without adjusting anchors will misalign
+      drawings.
+    </div>
+
+    <div class="prose">
+      <p><strong>Squarified treemap algorithm (high level):</strong></p>
+      <ol>
+        <li>Sort items by descending weight so large tiles are decided first.</li>
+        <li>Greedily pack items into horizontal or vertical strips along the remaining free
+            rectangle, picking the strip orientation that keeps child rectangles closest to square.</li>
+        <li>Each strip's thickness is chosen so the strip's total area matches the sum of its
+            items' weights (scaled to canvas area).</li>
+        <li>Recurse into the leftover L-shaped region until every item has a rectangle.</li>
+      </ol>
+      <p>
+        The result is readable at a glance: big categories get big tiles, small ones nest in
+        corners. Unlike word clouds, every input item receives a tile (nothing is "dropped" for
+        lack of space) as long as weights are positive and the canvas area is non-zero.
+      </p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Step by step</h2>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 1</span>
+      <h3>Call <code>treemap()</code></h3>
+      <p class="prose">
+        Import <code>treemap</code> from the same entry point as word-cloud layout. Options are
+        simpler here — only <code>width</code> and <code>height</code> matter. Font sizes are not
+        computed for you; pick label typography when you render.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>treemap-layout.js</span>
+        </div>
+        <pre><span class="kw">import</span> { <span class="id">treemap</span> } <span class="kw">from</span> <span class="str">"./js/index.js"</span>;
+
+<span class="kw">const</span> <span class="id">items</span> = [
+  { <span class="id">text</span>: <span class="str">"WebAssembly"</span>, <span class="id">weight</span>: <span class="nu">100</span> },
+  { <span class="id">text</span>: <span class="str">"Rust"</span>,        <span class="id">weight</span>: <span class="nu">78</span>  },
+  { <span class="id">text</span>: <span class="str">"layout"</span>,      <span class="id">weight</span>: <span class="nu">60</span>  },
+  { <span class="id">text</span>: <span class="str">"treemap"</span>,     <span class="id">weight</span>: <span class="nu">44</span>  },
+  <span class="cm">// … more items</span>
+];
+
+<span class="kw">const</span> <span class="id">width</span>  = <span class="nu">960</span>;
+<span class="kw">const</span> <span class="id">height</span> = <span class="nu">540</span>;
+
+<span class="kw">const</span> <span class="id">rects</span> = <span class="kw">await</span> <span class="fn">treemap</span>(<span class="id">items</span>, { <span class="id">width</span>, <span class="id">height</span> });
+
+<span class="cm">// rects → [{ text, value, x, y, width, height }, ...]</span>
+<span class="cm">// `value` echoes the input weight; areas ≈ (value / sum) × width × height</span>
+<span class="id">console</span>.<span class="fn">log</span>(<span class="id">rects</span>[<span class="nu">0</span>]);
+<span class="cm">// { text: "WebAssembly", value: 100, x: 0, y: 0, width: 412, height: 298 }</span></pre>
+      </div>
+    </div>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 2</span>
+      <h3>Render tiles with <code>fillRect</code></h3>
+      <p class="prose">
+        Use <code>ctx.fillRect(x, y, width, height)</code> directly — no translate/rotate dance.
+        A 1px inset on each side makes adjacent tile borders visible. Labels are optional UI
+        sugar: only draw text when the cell is large enough to read.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>render-treemap.js</span>
+        </div>
+        <pre><span class="cm">/** Minimum cell size (px) before we attempt a label */</span>
+<span class="kw">const</span> <span class="id">MIN_LABEL_W</span> = <span class="nu">34</span>;
+<span class="kw">const</span> <span class="id">MIN_LABEL_H</span> = <span class="nu">16</span>;
+<span class="kw">const</span> <span class="id">INSET</span>       = <span class="nu">1</span>;   <span class="cm">// gap between tile fill and grid line</span>
+<span class="kw">const</span> <span class="id">PAD</span>         = <span class="nu">6</span>;   <span class="cm">// label padding inside tile</span>
+
+<span class="kw">export function</span> <span class="fn">drawTreemap</span>(<span class="id">ctx</span>, <span class="id">rects</span>, <span class="id">palette</span>) {
+  <span class="id">ctx</span>.<span class="id">textBaseline</span> = <span class="str">"top"</span>;
+
+  <span class="kw">for</span> (<span class="kw">let</span> <span class="id">i</span> = <span class="nu">0</span>; <span class="id">i</span> &lt; <span class="id">rects</span>.<span class="id">length</span>; <span class="id">i</span>++) {
+    <span class="kw">const</span> <span class="id">r</span> = <span class="id">rects</span>[<span class="id">i</span>];
+    <span class="kw">const</span> <span class="id">iw</span> = Math.<span class="fn">max</span>(<span class="nu">0</span>, <span class="id">r</span>.<span class="id">width</span>  - <span class="id">INSET</span> * <span class="nu">2</span>);
+    <span class="kw">const</span> <span class="id">ih</span> = Math.<span class="fn">max</span>(<span class="nu">0</span>, <span class="id">r</span>.<span class="id">height</span> - <span class="id">INSET</span> * <span class="nu">2</span>);
+
+    <span class="cm">// Tile fill</span>
+    <span class="id">ctx</span>.<span class="id">fillStyle</span> = <span class="id">palette</span>[<span class="id">i</span> % <span class="id">palette</span>.<span class="id">length</span>];
+    <span class="id">ctx</span>.<span class="fn">fillRect</span>(<span class="id">r</span>.<span class="id">x</span> + <span class="id">INSET</span>, <span class="id">r</span>.<span class="id">y</span> + <span class="id">INSET</span>, <span class="id">iw</span>, <span class="id">ih</span>);
+
+    <span class="cm">// Label — skip tiny cells</span>
+    <span class="kw">if</span> (<span class="id">r</span>.<span class="id">width</span> > <span class="id">MIN_LABEL_W</span> && <span class="id">r</span>.<span class="id">height</span> > <span class="id">MIN_LABEL_H</span>) {
+      <span class="id">ctx</span>.<span class="id">fillStyle</span> = <span class="str">"rgba(255,255,255,0.92)"</span>;
+      <span class="id">ctx</span>.<span class="id">font</span> = <span class="str">"13px system-ui, sans-serif"</span>;
+      <span class="id">ctx</span>.<span class="fn">fillText</span>(<span class="id">r</span>.<span class="id">text</span>, <span class="id">r</span>.<span class="id">x</span> + <span class="id">PAD</span>, <span class="id">r</span>.<span class="id">y</span> + <span class="id">PAD</span>);
+    }
+  }
+}</pre>
+      </div>
+    </div>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 3</span>
+      <h3>Word cloud vs. treemap — output comparison</h3>
+      <table class="ref-table">
+        <thead>
+          <tr><th></th><th><code>layout()</code> (word cloud)</th><th><code>treemap()</code></th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Output shape</td>
+            <td><code>{ text, x, y, rotation, fontSize }</code></td>
+            <td><code>{ text, value, x, y, width, height }</code></td>
+          </tr>
+          <tr>
+            <td><code>x</code>, <code>y</code> mean</td>
+            <td>Center of word bbox</td>
+            <td>Top-left corner of tile</td>
+          </tr>
+          <tr>
+            <td>Items that don't fit</td>
+            <td>Omitted from result array</td>
+            <td>All items tiled (weights &gt; 0)</td>
+          </tr>
+          <tr>
+            <td>Overlap</td>
+            <td>None (bitmap collision mask)</td>
+            <td>None (partition of canvas)</td>
+          </tr>
+          <tr>
+            <td>Typical draw call</td>
+            <td><code>fillText</code> after <code>translate</code> + <code>rotate</code></td>
+            <td><code>fillRect</code> (+ optional <code>fillText</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 4</span>
+      <h3>Complete page</h3>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>main.js</span>
+        </div>
+        <pre><span class="kw">import</span> { <span class="id">treemap</span> }      <span class="kw">from</span> <span class="str">"./js/index.js"</span>;
+<span class="kw">import</span> { <span class="id">drawTreemap</span> }  <span class="kw">from</span> <span class="str">"./render-treemap.js"</span>;
+
+<span class="kw">const</span> <span class="id">canvas</span> = <span class="id">document</span>.<span class="fn">getElementById</span>(<span class="str">"map"</span>);
+<span class="kw">const</span> <span class="id">ctx</span>    = <span class="id">canvas</span>.<span class="fn">getContext</span>(<span class="str">"2d"</span>);
+
+<span class="kw">const</span> <span class="id">items</span> = [
+  [<span class="str">"WebAssembly"</span>, <span class="nu">100</span>], [<span class="str">"Rust"</span>, <span class="nu">78</span>], [<span class="str">"layout"</span>, <span class="nu">60</span>],
+  [<span class="str">"engine"</span>, <span class="nu">52</span>], [<span class="str">"treemap"</span>, <span class="nu">44</span>], [<span class="str">"bitmap"</span>, <span class="nu">38</span>],
+].<span class="fn">map</span>(([<span class="id">text</span>, <span class="id">weight</span>]) => ({ <span class="id">text</span>, <span class="id">weight</span> }));
+
+<span class="kw">async function</span> <span class="fn">render</span>() {
+  <span class="kw">const</span> <span class="id">w</span> = <span class="id">Math</span>.<span class="fn">floor</span>(<span class="id">canvas</span>.<span class="fn">getBoundingClientRect</span>().<span class="id">width</span>) || <span class="nu">800</span>;
+  <span class="kw">const</span> <span class="id">h</span> = <span class="id">Math</span>.<span class="fn">round</span>(<span class="id">w</span> * <span class="nu">0.55</span>);
+  <span class="id">canvas</span>.<span class="id">width</span> = <span class="id">w</span>;
+  <span class="id">canvas</span>.<span class="id">height</span> = <span class="id">h</span>;
+
+  <span class="kw">const</span> <span class="id">rects</span> = <span class="kw">await</span> <span class="fn">treemap</span>(<span class="id">items</span>, { <span class="id">width</span>: <span class="id">w</span>, <span class="id">height</span>: <span class="id">h</span> });
+  <span class="fn">drawTreemap</span>(<span class="id">ctx</span>, <span class="id">rects</span>, [<span class="str">"#1f6feb"</span>, <span class="str">"#238636"</span>, <span class="str">"#a371f7"</span>, <span class="str">"#db6d28"</span>]);
+}
+
+<span class="fn">render</span>();
+<span class="id">window</span>.<span class="fn">addEventListener</span>(<span class="str">"resize"</span>, <span class="fn">render</span>);</pre>
+      </div>
+      <div class="callout warn">
+        <strong>Hover / drill-down.</strong> Treemap rects are plain geometry — hit-testing is a
+        simple point-in-rectangle check on mouse coordinates. For nested hierarchies you'd pass
+        tree-structured input in your app layer; this engine flattens one level of siblings per call.
+      </div>
+    </div>
+  </div>
+
+  <div class="section section-playground">
+    <h2>Try it yourself</h2>
     <p class="section-sub">
-      The <code>LayoutEngine</code> trait is generic over input, config, and output types.
-      <code>treemap()</code> is a fully-implemented strategy that tiles the canvas into
-      rectangles whose areas are proportional to weight (squarified algorithm) — no overlaps,
-      no gaps. Same <code>{ text, weight }</code> input, rectangle output.
+      Twenty technology terms, fixed weights. Colors cycle through a palette; labels only appear
+      when a tile is large enough to read comfortably.
     </p>
 
     <div class="panel">
       <div class="panel-header">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span>treemap.html</span>
+        <span>live treemap</span>
       </div>
       <div class="panel-body">
         <canvas id="map" class="dark"></canvas>
         <div class="controls-below">
+          <button class="btn" id="rerender" type="button">Re-layout</button>
           <span class="meta" id="meta"></span>
         </div>
       </div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>Code</h2>
-    <div class="code-block">
-      <div class="code-block-header">
-        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span>your-app.js</span>
-      </div>
-      <pre><span class="kw">import</span> { <span class="id">treemap</span> } <span class="kw">from</span> <span class="str">"./js/index.js"</span>;
-
-<span class="kw">const</span> <span class="id">rects</span> = <span class="kw">await</span> <span class="fn">treemap</span>(
-  [
-    { <span class="id">text</span>: <span class="str">"WebAssembly"</span>, <span class="id">weight</span>: <span class="nu">100</span> },
-    { <span class="id">text</span>: <span class="str">"Rust"</span>,        <span class="id">weight</span>: <span class="nu">78</span>  },
-    { <span class="id">text</span>: <span class="str">"layout"</span>,      <span class="id">weight</span>: <span class="nu">60</span>  },
-    <span class="cm">/* … */</span>
-  ],
-  { <span class="id">width</span>: <span class="nu">960</span>, <span class="id">height</span>: <span class="nu">540</span> },
-);
-<span class="cm">// → [{ text, value, x, y, width, height }, ...]</span>
-<span class="cm">// x/y are top-left corner (unlike word-cloud placements, which are centered).</span>
-
-<span class="kw">const</span> <span class="id">ctx</span> = <span class="id">canvas</span>.<span class="fn">getContext</span>(<span class="str">"2d"</span>);
-<span class="id">ctx</span>.<span class="id">textBaseline</span> = <span class="str">"top"</span>;
-
-<span class="kw">for</span> (<span class="kw">const</span> <span class="id">r</span> <span class="kw">of</span> <span class="id">rects</span>) {
-  <span class="id">ctx</span>.<span class="id">fillStyle</span> = <span class="str">"steelblue"</span>;
-  <span class="cm">// 1 px inset so tile borders read as a grid</span>
-  <span class="id">ctx</span>.<span class="fn">fillRect</span>(<span class="id">r</span>.<span class="id">x</span> + <span class="nu">1</span>, <span class="id">r</span>.<span class="id">y</span> + <span class="nu">1</span>, <span class="id">r</span>.<span class="id">width</span> - <span class="nu">2</span>, <span class="id">r</span>.<span class="id">height</span> - <span class="nu">2</span>);
-
-  <span class="kw">if</span> (<span class="id">r</span>.<span class="id">width</span> > <span class="nu">34</span> && <span class="id">r</span>.<span class="id">height</span> > <span class="nu">16</span>) {
-    <span class="id">ctx</span>.<span class="id">fillStyle</span> = <span class="str">"rgba(255,255,255,0.9)"</span>;
-    <span class="id">ctx</span>.<span class="id">font</span> = <span class="str">"13px system-ui, sans-serif"</span>;
-    <span class="id">ctx</span>.<span class="fn">fillText</span>(<span class="id">r</span>.<span class="id">text</span>, <span class="id">r</span>.<span class="id">x</span> + <span class="nu">6</span>, <span class="id">r</span>.<span class="id">y</span> + <span class="nu">6</span>);
-  }
-}</pre>
     </div>
   </div>
 
@@ -99,26 +252,39 @@
   ];
   const items = DATA.map(([text, weight]) => ({ text, weight }));
 
-  const w = Math.floor(canvas.getBoundingClientRect().width) || 800;
-  canvas.width  = w;
-  canvas.height = Math.round(w * 0.55);
+  const MIN_LABEL_W = 34;
+  const MIN_LABEL_H = 16;
 
-  try {
-    const rects = await treemap(items, { width: canvas.width, height: canvas.height });
-    ctx.textBaseline = "top";
-    rects.forEach((r, i) => {
-      ctx.fillStyle = palette[i % palette.length];
-      ctx.fillRect(r.x + 1, r.y + 1, Math.max(0, r.width - 2), Math.max(0, r.height - 2));
-      if (r.width > 34 && r.height > 16) {
-        ctx.fillStyle = "rgba(255,255,255,0.92)";
-        ctx.font = "13px system-ui, sans-serif";
-        ctx.fillText(r.text, r.x + 6, r.y + 6);
-      }
-    });
-    metaEl.textContent = `${rects.length} tiles · squarified · areas ∝ weight`;
-  } catch (err) {
-    metaEl.textContent = `error: ${err.message}`;
+  async function render() {
+    const w = Math.floor(canvas.getBoundingClientRect().width) || 800;
+    canvas.width  = w;
+    canvas.height = Math.round(w * 0.55);
+
+    metaEl.textContent = "laying out…";
+    try {
+      const t0 = performance.now();
+      const rects = await treemap(items, { width: canvas.width, height: canvas.height });
+      const ms = (performance.now() - t0).toFixed(1);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.textBaseline = "top";
+      rects.forEach((r, i) => {
+        ctx.fillStyle = palette[i % palette.length];
+        ctx.fillRect(r.x + 1, r.y + 1, Math.max(0, r.width - 2), Math.max(0, r.height - 2));
+        if (r.width > MIN_LABEL_W && r.height > MIN_LABEL_H) {
+          ctx.fillStyle = "rgba(255,255,255,0.92)";
+          ctx.font = "13px system-ui, sans-serif";
+          ctx.fillText(r.text, r.x + 6, r.y + 6);
+        }
+      });
+      metaEl.textContent = `${rects.length} tiles · squarified · areas ∝ weight · ${ms} ms`;
+    } catch (err) {
+      metaEl.textContent = `error: ${err.message}`;
+    }
   }
+
+  document.getElementById("rerender").addEventListener("click", render);
+  render();
 </script>
 </body>
 </html>

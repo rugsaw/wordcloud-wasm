@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Web Worker — wordcloud-wasm</title>
+  <title>Running layout in a Web Worker — wordcloud-wasm</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -20,46 +20,83 @@
 <div class="page">
 
   <div class="section">
-    <h2>Off-main-thread layout</h2>
-    <p class="section-sub">
-      Layout runs inside a dedicated Web Worker — the WASM module never touches the
-      main thread. The spinning indicator below runs on a CSS animation driven by the
-      main thread: if layout blocked the main thread, the spinner would freeze.
-      It doesn't.
+    <h2>Layout off the main thread</h2>
+    <p class="guide-lead">
+      Packing a large word cloud can keep the CPU busy for tens of milliseconds — long enough
+      to stutter animations and miss input events. The fix is familiar: move the heavy work off
+      the main thread. Here we'll run the same layout inside a Web Worker, using the small
+      client/worker pair that ships with the library.
     </p>
 
-    <div class="controls">
-      <button class="btn size-btn active" data-n="24"   data-mode="pretty">24 words</button>
-      <button class="btn size-btn"        data-n="500"  data-mode="pretty">500 words</button>
-      <button class="btn size-btn"        data-n="5000" data-mode="fast"  >5 000 words</button>
-      <button class="btn" id="run">Re-run layout</button>
-      <span class="spin" title="main thread stays responsive"></span>
-      <span class="meta" id="meta">idle</span>
+    <div class="callout tip">
+      <strong>When you need a worker.</strong> Layouts under ~200 words often finish in a few
+      milliseconds on the main thread. For dashboards that re-layout on every slider move, clouds
+      with thousands of words, or pages where you must keep a loading spinner / chart animation
+      alive — move layout to a worker.
     </div>
 
-    <div class="panel">
-      <div class="panel-header">
-        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span>worker.html</span>
-      </div>
-      <div class="panel-body">
-        <canvas id="cloud"></canvas>
-      </div>
+    <div class="prose">
+      <p><strong>How the pieces connect:</strong></p>
+      <ol>
+        <li><strong>Main thread</strong> — your UI code calls <code>client.layout(items, options)</code>.
+            That returns a Promise and immediately yields control back to the browser.</li>
+        <li><strong><code>postMessage</code></strong> — the client sends a structured-cloneable
+            message <code>{ type: "layout", id, items, options }</code> to the worker. Each call
+            gets a unique <code>id</code> so replies can arrive out of order.</li>
+        <li><strong>Worker thread</strong> — the worker script imports the same
+            <code>layout()</code> function, awaits WASM, and posts back either
+            <code>{ type: "result", id, placements }</code> or <code>{ type: "error", id, message }</code>.</li>
+        <li><strong>Back on the main thread</strong> — the client matches <code>id</code> to the
+            pending Promise and resolves or rejects it. From there you draw on canvas exactly as
+            you would after a direct <code>layout()</code> call.</li>
+      </ol>
     </div>
   </div>
 
   <div class="section">
-    <h2>Code</h2>
-    <div class="code-block">
-      <div class="code-block-header">
-        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span>your-app.js</span>
-      </div>
-      <pre><span class="cm">// Spawns js/worker.js as a module Worker.</span>
-<span class="cm">// Concurrent calls are safe — each gets its own request ID.</span>
-<span class="kw">import</span> { <span class="id">createLayoutClient</span> } <span class="kw">from</span> <span class="str">"./js/client.js"</span>;
+    <h2>Step by step</h2>
 
+    <div class="walkthrough">
+      <span class="step-label">Step 1</span>
+      <h3>Create a layout client on the main thread</h3>
+      <p class="prose">
+        <code>createLayoutClient()</code> spawns a module worker unless you pass your own
+        <code>Worker</code> instance. One client per worker is usually enough — reuse it across
+        many layout calls.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>app.js — main thread</span>
+        </div>
+        <pre><span class="kw">import</span> { <span class="id">createLayoutClient</span> } <span class="kw">from</span> <span class="str">"./js/client.js"</span>;
+
+<span class="cm">// Spawns: new Worker(new URL("./worker.js", import.meta.url), { type: "module" })</span>
 <span class="kw">const</span> <span class="id">client</span> = <span class="fn">createLayoutClient</span>();
+
+<span class="cm">// Optional: bring your own worker (custom URL, shared worker pool, etc.)</span>
+<span class="cm">// const client = createLayoutClient({ worker: myWorker });</span></pre>
+      </div>
+    </div>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 2</span>
+      <h3>Request layout — same options as direct <code>layout()</code></h3>
+      <p class="prose">
+        The worker API accepts the same options as calling <code>layout()</code> directly.
+        Items and options are copied via the structured-clone algorithm (plain objects and arrays
+        only — no functions or DOM nodes). The returned placements are plain objects too.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>app.js — layout call</span>
+        </div>
+        <pre><span class="kw">const</span> <span class="id">items</span> = [
+  { <span class="id">text</span>: <span class="str">"WebAssembly"</span>, <span class="id">weight</span>: <span class="nu">100</span> },
+  { <span class="id">text</span>: <span class="str">"worker"</span>,      <span class="id">weight</span>: <span class="nu">60</span>  },
+  <span class="cm">// …</span>
+];
 
 <span class="kw">const</span> <span class="id">placements</span> = <span class="kw">await</span> <span class="id">client</span>.<span class="fn">layout</span>(<span class="id">items</span>, {
   <span class="id">mode</span>:        <span class="str">"pretty"</span>,
@@ -69,19 +106,181 @@
   <span class="id">maxFontSize</span>: <span class="nu">88</span>,
   <span class="id">padding</span>:     <span class="nu">2</span>,
 });
-<span class="cm">// Render exactly as the canvas example — x/y are still bbox centers.</span>
 
-<span class="cm">// Free the Worker when done:</span>
-<span class="id">client</span>.<span class="fn">terminate</span>();
+<span class="cm">// placements shape is identical to main-thread layout()</span>
+<span class="cm">// → [{ text, x, y, rotation, fontSize }, ...]</span></pre>
+      </div>
+      <p class="prose" style="margin-top:14px">
+        <strong>Concurrent calls.</strong> You can fire multiple <code>client.layout()</code> calls
+        without awaiting each one first. The client assigns incrementing IDs; whichever layout
+        finishes first resolves its Promise first. Useful for prefetching alternate datasets or
+        A/B layouts.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>app.js — concurrent requests</span>
+        </div>
+        <pre><span class="kw">const</span> [<span class="id">a</span>, <span class="id">b</span>] = <span class="kw">await</span> Promise.<span class="fn">all</span>([
+  <span class="id">client</span>.<span class="fn">layout</span>(<span class="id">datasetA</span>, { <span class="id">mode</span>: <span class="str">"fast"</span>, <span class="id">width</span>: <span class="nu">800</span>, <span class="id">height</span>: <span class="nu">500</span> }),
+  <span class="id">client</span>.<span class="fn">layout</span>(<span class="id">datasetB</span>, { <span class="id">mode</span>: <span class="str">"fast"</span>, <span class="id">width</span>: <span class="nu">800</span>, <span class="id">height</span>: <span class="nu">500</span> }),
+]);
+<span class="cm">// a and b resolve independently on the worker — IDs keep them straight.</span></pre>
+      </div>
+    </div>
 
-<span class="cm">// ── How the worker side looks (js/worker.js) ──</span>
-<span class="kw">import</span> { <span class="id">layout</span> } <span class="kw">from</span> <span class="str">"./index.js"</span>;
+    <div class="walkthrough">
+      <span class="step-label">Step 3</span>
+      <h3>Render on the main thread, terminate when done</h3>
+      <p class="prose">
+        Drawing still happens on the main thread — workers cannot touch the DOM or canvas directly.
+        After you paint, call <code>client.terminate()</code> to free the worker thread (and reject
+        any in-flight requests). For long-lived apps, keep the client alive and reuse it.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>app.js — render + cleanup</span>
+        </div>
+        <pre><span class="kw">import</span> { <span class="id">drawWordCloud</span> } <span class="kw">from</span> <span class="str">"./render.js"</span>; <span class="cm">// your canvas draw helper</span>
 
-<span class="id">self</span>.<span class="fn">addEventListener</span>(<span class="str">"message"</span>, <span class="kw">async</span> (<span class="id">e</span>) => {
-  <span class="kw">const</span> { <span class="id">id</span>, <span class="id">items</span>, <span class="id">options</span> } = <span class="id">e</span>.<span class="id">data</span>;
-  <span class="kw">const</span> <span class="id">placements</span> = <span class="kw">await</span> <span class="fn">layout</span>(<span class="id">items</span>, <span class="id">options</span>);
-  <span class="id">self</span>.<span class="fn">postMessage</span>({ <span class="id">type</span>: <span class="str">"result"</span>, <span class="id">id</span>, <span class="id">placements</span> });
+<span class="kw">const</span> <span class="id">ctx</span> = <span class="id">document</span>.<span class="fn">querySelector</span>(<span class="str">"canvas"</span>).<span class="fn">getContext</span>(<span class="str">"2d"</span>);
+<span class="fn">drawWordCloud</span>(<span class="id">ctx</span>, <span class="id">placements</span>);
+
+<span class="cm">// When navigating away or shutting down:</span>
+<span class="id">client</span>.<span class="fn">terminate</span>();</pre>
+      </div>
+    </div>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 4</span>
+      <h3>What the worker script does</h3>
+      <p class="prose">
+        You rarely need to touch this file — <code>createLayoutClient()</code> wires it up for you.
+        Still, the message protocol is worth knowing if you want to fold layout into an existing
+        worker or add your own logging.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>worker.js — simplified</span>
+        </div>
+        <pre><span class="kw">import</span> { <span class="id">layout</span> } <span class="kw">from</span> <span class="str">"./index.js"</span>;
+
+<span class="id">self</span>.<span class="fn">addEventListener</span>(<span class="str">"message"</span>, <span class="kw">async</span> (<span class="id">event</span>) => {
+  <span class="kw">const</span> <span class="id">msg</span> = <span class="id">event</span>.<span class="id">data</span>;
+  <span class="kw">if</span> (!<span class="id">msg</span> || <span class="id">msg</span>.<span class="id">type</span> !== <span class="str">"layout"</span>) <span class="kw">return</span>;
+
+  <span class="kw">const</span> { <span class="id">id</span>, <span class="id">items</span>, <span class="id">options</span> } = <span class="id">msg</span>;
+  <span class="kw">try</span> {
+    <span class="kw">const</span> <span class="id">placements</span> = <span class="kw">await</span> <span class="fn">layout</span>(<span class="id">items</span>, <span class="id">options</span>);
+    <span class="cm">// WASM init is cached inside layout() — first message pays download cost.</span>
+    <span class="id">self</span>.<span class="fn">postMessage</span>({ <span class="id">type</span>: <span class="str">"result"</span>, <span class="id">id</span>, <span class="id">placements</span> });
+  } <span class="kw">catch</span> (<span class="id">err</span>) {
+    <span class="id">self</span>.<span class="fn">postMessage</span>({
+      <span class="id">type</span>: <span class="str">"error"</span>,
+      <span class="id">id</span>,
+      <span class="id">message</span>: <span class="id">err</span>.<span class="id">message</span> ?? String(<span class="id">err</span>),
+    });
+  }
 });</pre>
+      </div>
+      <p class="prose" style="margin-top:14px"><strong>Message protocol summary:</strong></p>
+      <table class="ref-table">
+        <thead>
+          <tr><th>Direction</th><th>Payload</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>main → worker</td>
+            <td><code>{ type: "layout", id, items, options }</code></td>
+            <td><code>id</code> is a positive integer assigned by the client.</td>
+          </tr>
+          <tr>
+            <td>worker → main</td>
+            <td><code>{ type: "result", id, placements }</code></td>
+            <td>Resolves the matching Promise with <code>placements</code>.</td>
+          </tr>
+          <tr>
+            <td>worker → main</td>
+            <td><code>{ type: "error", id, message }</code></td>
+            <td>Rejects the matching Promise with <code>Error(message)</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 5</span>
+      <h3>How the client routes replies</h3>
+      <p class="prose">
+        The client is a thin Promise router: a <code>Map</code> tracks in-flight requests by id.
+        If the worker crashes outright (failed import, uncaught exception), every pending Promise
+        is rejected so nothing hangs forever.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>client.js — request routing (excerpt)</span>
+        </div>
+        <pre><span class="kw">const</span> <span class="id">pending</span> = <span class="kw">new</span> Map();
+<span class="kw">let</span> <span class="id">nextId</span> = <span class="nu">1</span>;
+
+<span class="id">worker</span>.<span class="fn">addEventListener</span>(<span class="str">"message"</span>, (<span class="id">event</span>) => {
+  <span class="kw">const</span> <span class="id">msg</span> = <span class="id">event</span>.<span class="id">data</span>;
+  <span class="kw">const</span> <span class="id">entry</span> = <span class="id">pending</span>.<span class="fn">get</span>(<span class="id">msg</span>.<span class="id">id</span>);
+  <span class="kw">if</span> (!<span class="id">entry</span>) <span class="kw">return</span>;
+  <span class="id">pending</span>.<span class="fn">delete</span>(<span class="id">msg</span>.<span class="id">id</span>);
+  <span class="kw">if</span> (<span class="id">msg</span>.<span class="id">type</span> === <span class="str">"result"</span>) <span class="id">entry</span>.<span class="fn">resolve</span>(<span class="id">msg</span>.<span class="id">placements</span>);
+  <span class="kw">else</span> <span class="id">entry</span>.<span class="fn">reject</span>(<span class="kw">new</span> Error(<span class="id">msg</span>.<span class="id">message</span>));
+});
+
+<span class="kw">function</span> <span class="fn">layout</span>(<span class="id">items</span>, <span class="id">options</span>) {
+  <span class="kw">const</span> <span class="id">id</span> = <span class="id">nextId</span>++;
+  <span class="kw">return new</span> Promise((<span class="id">resolve</span>, <span class="id">reject</span>) => {
+    <span class="id">pending</span>.<span class="fn">set</span>(<span class="id">id</span>, { <span class="id">resolve</span>, <span class="id">reject</span> });
+    <span class="id">worker</span>.<span class="fn">postMessage</span>({ <span class="id">type</span>: <span class="str">"layout"</span>, <span class="id">id</span>, <span class="id">items</span>, <span class="id">options</span> });
+  });
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="section section-playground">
+    <h2>Try it yourself</h2>
+    <p class="section-sub">
+      The spinner in the panel header is a CSS animation on the main thread. If layout blocked
+      that thread, it would freeze during large runs — watch it keep spinning while thousands of
+      words pack in the background.
+    </p>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>live worker layout</span>
+        <span class="spin" style="margin-left:auto" title="main thread stays responsive"></span>
+      </div>
+      <div class="panel-body">
+        <div class="demo-viewport" id="worker-viewport">
+          <p class="fullscreen-hint">Press <kbd>Esc</kbd> or click Exit fullscreen to return to the demo card.</p>
+          <div class="canvas-wrap">
+            <canvas id="cloud"></canvas>
+          </div>
+          <div class="controls controls-below">
+            <button class="btn size-btn active" data-n="50"   data-mode="pretty">50 words</button>
+            <button class="btn size-btn"        data-n="500"  data-mode="pretty">500 words</button>
+            <button class="btn size-btn"        data-n="5000" data-mode="fast"  >5 000 words</button>
+            <button class="btn" id="run">Re-run layout</button>
+            <button class="btn" id="fullscreen" type="button">Fullscreen</button>
+            <span class="spin worker-fs-spin" title="main thread stays responsive" aria-hidden="true"></span>
+            <span class="meta" id="meta">idle</span>
+          </div>
+        </div>
+        <p class="demo-note">
+          The status line tags results with <code>(off-thread)</code> so you can tell worker
+          timing apart from main-thread layout at a glance.
+        </p>
+      </div>
     </div>
   </div>
 
@@ -91,36 +290,68 @@
   import { createLayoutClient }   from "../js/client.js";
   import { generate, WeightDist } from "../js/datasets.js";
 
-  const canvas  = document.getElementById("cloud");
-  const ctx     = canvas.getContext("2d");
-  const metaEl  = document.getElementById("meta");
-  const palette = ["#1f6feb","#238636","#a371f7","#db6d28","#cf222e","#9e6a03","#0891b2","#7c3aed"];
-
-  // Curated list used for the default 24-word view; larger presets are generated.
-  const WORDS = [
-    ["WebAssembly", 100], ["Rust", 92], ["layout", 70], ["engine", 64],
-    ["canvas", 55], ["spiral", 50], ["bitmap", 48], ["mask", 44],
-    ["collision", 40], ["occupancy", 38], ["render", 34], ["weight", 30],
-    ["font", 28], ["pretty", 26], ["fast", 24], ["balanced", 22],
-    ["grid", 20], ["pixels", 18], ["word", 16], ["cloud", 14],
-    ["vector", 12], ["packing", 11], ["wasm", 10], ["speed", 9],
-  ];
-  const showcase = WORDS.map(([text, weight]) => ({ text, weight }));
+  const canvas   = document.getElementById("cloud");
+  const viewport = document.getElementById("worker-viewport");
+  const ctx      = canvas.getContext("2d");
+  const metaEl   = document.getElementById("meta");
+  const palette  = ["#1f6feb","#238636","#a371f7","#db6d28","#cf222e","#9e6a03","#0891b2","#7c3aed"];
 
   const client = createLayoutClient();
 
-  let currentN    = 24;
+  let currentN    = 50;
   let currentMode = "pretty";
   let seed        = 1;
 
   function fontCfg(n, mode) {
-    if (mode === "fast") return { minFontSize: 6,  maxFontSize: 16, padding: 1 };
-    if (n <= 50)         return { minFontSize: 14, maxFontSize: 80, padding: 2 };
+    if (mode === "fast") return { minFontSize: 6, maxFontSize: 16, padding: 1 };
+    if (n <= 50)         return { minFontSize: 16, maxFontSize: 88, padding: 2 };
     return                      { minFontSize: 10, maxFontSize: 52, padding: 2 };
   }
 
-  function itemsFor(n) {
-    return n <= 24 ? showcase : generate(n, WeightDist.Zipf, seed);
+  function fontRangeLabel(cfg) {
+    return `min/max ${cfg.minFontSize}–${cfg.maxFontSize}px`;
+  }
+
+  function cardLayoutHeight(w, n) {
+    return Math.round(w * (n >= 5000 ? 0.56 : n >= 500 ? 0.75 : 0.65));
+  }
+
+function setDemoButtonsDisabled(disabled) {
+    document.querySelectorAll(".btn").forEach((b) => {
+      if (b.id === "fullscreen") return;
+      b.disabled = disabled;
+    });
+  }
+
+  function isViewportFullscreen() {
+    return document.fullscreenElement === viewport;
+  }
+
+  function fullscreenLayoutSize() {
+    const pad = 40;
+    const hint = viewport.querySelector(".fullscreen-hint");
+    const controls = viewport.querySelector(".controls");
+    let chrome = pad;
+    if (hint) chrome += hint.offsetHeight + 8;
+    if (controls) chrome += controls.offsetHeight + 12;
+    return {
+      w: Math.max(320, Math.floor(window.innerWidth - pad)),
+      h: Math.max(200, Math.floor(window.innerHeight - chrome)),
+    };
+  }
+
+  function setupFullscreen(btn, onChange) {
+    btn.addEventListener("click", () => {
+      if (isViewportFullscreen()) document.exitFullscreen();
+      else viewport.requestFullscreen?.().catch(() => {});
+    });
+    viewport.addEventListener("fullscreenchange", () => {
+      btn.textContent = isViewportFullscreen() ? "Exit fullscreen" : "Fullscreen";
+      onChange();
+    });
+    window.addEventListener("resize", () => {
+      if (isViewportFullscreen()) onChange();
+    });
   }
 
   function draw(placements) {
@@ -139,31 +370,37 @@
   }
 
   async function run() {
-    const w = Math.floor(canvas.getBoundingClientRect().width) || 800;
-    // Landscape area that fits the panel — keeps even the 5000-word cloud on-screen.
-    const ratio = currentN >= 5000 ? 0.56 : currentN >= 500 ? 0.6 : 0.55;
-    canvas.width  = w;
-    canvas.height = Math.round(w * ratio);
-
-    const items = itemsFor(currentN);
     metaEl.textContent = "laying out on worker…";
-    document.querySelectorAll(".btn").forEach(b => b.disabled = true);
+
+    const cfg = fontCfg(currentN, currentMode);
+    let w, h;
+    if (isViewportFullscreen()) {
+      ({ w, h } = fullscreenLayoutSize());
+    } else {
+      w = Math.floor(canvas.getBoundingClientRect().width) || 800;
+      h = cardLayoutHeight(w, currentN);
+    }
+    canvas.width  = w;
+    canvas.height = h;
+
+    const items = generate(currentN, WeightDist.Zipf, seed);
+    setDemoButtonsDisabled(true);
     const t0 = performance.now();
     try {
       const placements = await client.layout(items, {
-        mode:   currentMode,
-        width:  canvas.width,
-        height: canvas.height,
-        ...fontCfg(currentN, currentMode),
+        mode: currentMode, width: w, height: h,
+        ...cfg,
       });
       draw(placements);
       const ms = (performance.now() - t0).toFixed(1);
-      metaEl.textContent = `${placements.length}/${items.length} placed · ${currentMode} · ${ms} ms (off-thread)`;
+      metaEl.textContent = `${placements.length}/${items.length} placed · ${currentMode} · ${fontRangeLabel(cfg)} · ${ms} ms (off-thread)`;
     } catch (err) {
       metaEl.textContent = `error: ${err.message}`;
     }
-    document.querySelectorAll(".btn").forEach(b => b.disabled = false);
+    setDemoButtonsDisabled(false);
   }
+
+  setupFullscreen(document.getElementById("fullscreen"), run);
 
   document.querySelectorAll(".size-btn").forEach(btn => {
     btn.addEventListener("click", () => {

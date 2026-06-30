@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>From raw text to word cloud — wordcloud-wasm</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-back" href="../">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06z"/></svg>
+    wordcloud-wasm
+  </a>
+  <span class="nav-sep">/</span>
+  <span class="nav-title">Text input</span>
+</nav>
+
+<div class="page">
+
+  <div class="section">
+    <h2>Turn prose into weighted terms</h2>
+    <p class="guide-lead">
+      Most real-world word clouds start from unstructured text — articles, survey responses,
+      commit messages, tweets. The engine expects <code>{ text, weight }</code> pairs, so your app
+      tokenizes the source, counts frequencies, optionally filters stop words, then passes the
+      top <em>N</em> terms to <code>layout()</code>.
+    </p>
+
+    <div class="callout tip">
+      <strong>Cap the term count.</strong> Very long documents can yield thousands of unique words.
+      Take the top 50–200 by frequency before layout — you'll get a readable cloud and faster
+      packing. Rare terms rarely fit anyway.
+    </div>
+
+    <div class="prose">
+      <p><strong>Typical pipeline:</strong></p>
+      <ol>
+        <li><strong>Normalize</strong> — lowercase, strip punctuation, collapse whitespace.</li>
+        <li><strong>Tokenize</strong> — split on word boundaries; drop tokens shorter than 2–3 chars.</li>
+        <li><strong>Filter</strong> — remove stop words ("the", "and", …) if they dominate.</li>
+        <li><strong>Count</strong> — <code>Map&lt;string, number&gt;</code> of term → frequency.</li>
+        <li><strong>Rank</strong> — sort by count descending, slice to top <code>maxTerms</code>.</li>
+        <li><strong>Layout</strong> — map counts to <code>weight</code> and call
+            <code>layout(items, options)</code>.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Step by step</h2>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 1</span>
+      <h3>Tokenize and count</h3>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>tokenize.js</span>
+        </div>
+        <pre><span class="kw">const</span> <span class="id">STOP</span> = <span class="kw">new</span> <span class="fn">Set</span>([<span class="str">"the"</span>, <span class="str">"and"</span>, <span class="str">"a"</span>, <span class="str">"to"</span>, <span class="str">"of"</span>, <span class="str">"in"</span>]);
+
+<span class="kw">export function</span> <span class="fn">textToItems</span>(<span class="id">raw</span>, { <span class="id">maxTerms</span> = <span class="nu">500</span>, <span class="id">minLen</span> = <span class="nu">3</span> } = {}) {
+  <span class="kw">const</span> <span class="id">counts</span> = <span class="kw">new</span> <span class="fn">Map</span>();
+  <span class="kw">const</span> <span class="id">tokens</span> = <span class="id">raw</span>.<span class="fn">toLowerCase</span>().<span class="fn">match</span>(<span class="str">/[a-z0-9']+/g</span>) ?? [];
+
+  <span class="kw">for</span> (<span class="kw">const</span> <span class="id">t</span> <span class="kw">of</span> <span class="id">tokens</span>) {
+    <span class="kw">if</span> (<span class="id">t</span>.<span class="id">length</span> &lt; <span class="id">minLen</span> || <span class="id">STOP</span>.<span class="fn">has</span>(<span class="id">t</span>)) <span class="kw">continue</span>;
+    <span class="id">counts</span>.<span class="fn">set</span>(<span class="id">t</span>, (<span class="id">counts</span>.<span class="fn">get</span>(<span class="id">t</span>) ?? <span class="nu">0</span>) + <span class="nu">1</span>);
+  }
+
+  <span class="kw">return</span> [...<span class="id">counts</span>.<span class="fn">entries</span>()]
+    .<span class="fn">sort</span>((<span class="id">a</span>, <span class="id">b</span>) => <span class="id">b</span>[<span class="nu">1</span>] - <span class="id">a</span>[<span class="nu">1</span>])
+    .<span class="fn">slice</span>(<span class="nu">0</span>, <span class="id">maxTerms</span>)
+    .<span class="fn">map</span>(([<span class="id">text</span>, <span class="id">weight</span>]) => ({ <span class="id">text</span>, <span class="id">weight</span> }));
+}</pre>
+      </div>
+    </div>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 2</span>
+      <h3>Re-layout when the user edits text</h3>
+      <p class="prose">
+        Debounce input events (300–500&nbsp;ms) so you don't re-pack on every keystroke. Show a
+        lightweight "laying out…" state while <code>layout()</code> runs — especially for longer
+        pasted documents.
+      </p>
+    </div>
+  </div>
+
+  <div class="section section-playground">
+    <h2>Try it yourself</h2>
+    <p class="section-sub">
+      Edit the sample paragraph or paste your own text. Click <strong>Generate cloud</strong> to
+      tokenize, count, and lay out the top terms.
+    </p>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>text → cloud</span>
+      </div>
+      <div class="panel-body">
+        <div class="text-input-stack">
+          <div class="demo-viewport" id="cloud-viewport">
+            <p class="fullscreen-hint">Press <kbd>Esc</kbd> or click Exit fullscreen to return to the demo card.</p>
+            <div class="canvas-wrap">
+              <canvas id="cloud"></canvas>
+            </div>
+            <div class="controls controls-below">
+              <button class="btn active" id="generate" type="button">Generate cloud</button>
+              <button class="btn" id="fullscreen" type="button">Fullscreen</button>
+              <span class="meta" id="meta"></span>
+            </div>
+          </div>
+          <div class="input-col">
+            <label class="field-label" for="source">Source text</label>
+            <textarea id="source" class="text-input-area" rows="6" spellcheck="false"></textarea>
+            <div class="controls">
+              <label class="check-label">
+                <input type="checkbox" id="stopwords" checked /> Filter stop words
+              </label>
+            </div>
+          </div>
+        </div>
+        <p class="demo-note">
+          Open <strong>Fullscreen</strong> to lay out the cloud on the full viewport — useful for
+          longer pasted documents with more unique terms.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  import { layout } from "../js/index.js";
+
+  const canvas   = document.getElementById("cloud");
+  const viewport = document.getElementById("cloud-viewport");
+  const ctx      = canvas.getContext("2d");
+  const sourceEl = document.getElementById("source");
+  const metaEl   = document.getElementById("meta");
+  const palette  = ["#1f6feb","#238636","#a371f7","#db6d28","#cf222e","#9e6a03","#0891b2","#7c3aed"];
+
+  function isViewportFullscreen() {
+    return document.fullscreenElement === viewport;
+  }
+
+  function fullscreenLayoutSize() {
+    const pad = 40;
+    const hint = viewport.querySelector(".fullscreen-hint");
+    const controls = viewport.querySelector(".controls");
+    let chrome = pad;
+    if (hint) chrome += hint.offsetHeight + 8;
+    if (controls) chrome += controls.offsetHeight + 12;
+    return {
+      w: Math.max(320, Math.floor(window.innerWidth - pad)),
+      h: Math.max(200, Math.floor(window.innerHeight - chrome)),
+    };
+  }
+
+  function setupFullscreen(btn, onChange) {
+    btn.addEventListener("click", () => {
+      if (isViewportFullscreen()) document.exitFullscreen();
+      else viewport.requestFullscreen?.().catch(() => {});
+    });
+    viewport.addEventListener("fullscreenchange", () => {
+      btn.textContent = isViewportFullscreen() ? "Exit fullscreen" : "Fullscreen";
+      onChange();
+    });
+    window.addEventListener("resize", () => {
+      if (isViewportFullscreen()) onChange();
+    });
+  }
+
+  const SAMPLE = `WebAssembly brings near-native performance to the browser. Rust compiles to wasm
+and powers layout engines that pack thousands of words without freezing the page. Word clouds
+visualize weighted text: the engine computes positions in WebAssembly while your app handles
+rendering on canvas, SVG, or the DOM. Spiral search and bitmap collision detection keep words
+from overlapping. Use a Web Worker when layouts grow large so the UI stays responsive.`;
+
+  const STOP = new Set([
+    "the","and","a","to","of","in","is","it","for","on","with","as","at","by","an","be",
+    "this","that","or","from","are","was","your","you","so","when","use","while",
+  ]);
+
+  sourceEl.value = SAMPLE;
+
+  function textToItems(raw, { maxTerms = 500, minLen = 3, filterStop = true } = {}) {
+    const counts = new Map();
+    const tokens = raw.toLowerCase().match(/[a-z0-9']+/g) ?? [];
+    for (const t of tokens) {
+      if (t.length < minLen) continue;
+      if (filterStop && STOP.has(t)) continue;
+      counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, maxTerms)
+      .map(([text, weight]) => ({ text, weight }));
+  }
+
+  function draw(placements) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    placements.forEach((p, i) => {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      if (p.rotation) ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.font = `${p.fontSize}px sans-serif`;
+      ctx.fillStyle = palette[i % palette.length];
+      ctx.fillText(p.text, 0, 0);
+      ctx.restore();
+    });
+  }
+
+  async function render() {
+    const items = textToItems(sourceEl.value, {
+      maxTerms: 500,
+      filterStop: document.getElementById("stopwords").checked,
+    });
+
+    if (items.length === 0) {
+      metaEl.textContent = "no terms found — try more text or disable stop-word filter";
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    let w, h;
+    if (isViewportFullscreen()) {
+      ({ w, h } = fullscreenLayoutSize());
+    } else {
+      w = Math.floor(canvas.getBoundingClientRect().width) || 400;
+      h = Math.round(w * 0.55);
+    }
+    canvas.width = w;
+    canvas.height = h;
+
+    metaEl.textContent = `laying out ${items.length} terms…`;
+    const t0 = performance.now();
+    const placements = await layout(items, {
+      mode: "pretty", width: w, height: h,
+      minFontSize: 10, maxFontSize: 56, padding: 2,
+    });
+    const ms = (performance.now() - t0).toFixed(1);
+
+    draw(placements);
+    metaEl.textContent = `${placements.length}/${items.length} placed · ${items.length} unique terms · ${ms} ms`;
+  }
+
+  document.getElementById("generate").addEventListener("click", render);
+  setupFullscreen(document.getElementById("fullscreen"), render);
+  render();
+</script>
+</body>
+</html>

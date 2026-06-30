@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Responsive word clouds — wordcloud-wasm</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-back" href="../">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06z"/></svg>
+    wordcloud-wasm
+  </a>
+  <span class="nav-sep">/</span>
+  <span class="nav-title">Responsive</span>
+</nav>
+
+<div class="page">
+
+  <div class="section">
+    <h2>Word clouds that adapt to their container</h2>
+    <p class="guide-lead">
+      Word clouds are often embedded in dashboards, split views, and cards that change size as
+      users drag panels, collapse sidebars, or rotate a phone. Layout coordinates are computed for
+      a specific <code>width</code> × <code>height</code> — stretching an old result with CSS
+      won't reflow words into a new aspect ratio. The fix is straightforward: measure the container,
+      call <code>layout()</code> again, and redraw.
+    </p>
+
+    <div class="callout tip">
+      <strong>Re-layout, don't rescale.</strong> CSS transforms and percentage widths can shrink a
+      finished cloud visually, but they can't pack more words into a wider panel or rearrange terms
+      when height changes. Treat each meaningful size change as a fresh layout pass against the
+      container's pixel dimensions.
+    </div>
+
+    <div class="prose">
+      <p><strong>Typical responsive flow:</strong></p>
+      <ol>
+        <li><strong>Measure.</strong> Read the container's content box — usually via
+            <code>ResizeObserver</code> or <code>getBoundingClientRect()</code> after a window
+            resize.</li>
+        <li><strong>Layout.</strong> Pass the new <code>width</code> and <code>height</code> to
+            <code>layout()</code> with the same weighted items. Font bounds can be tuned per
+            breakpoint if needed.</li>
+        <li><strong>Draw.</strong> Update the canvas backing store (or SVG <code>viewBox</code>) to
+            match, then render the returned placements.</li>
+        <li><strong>Debounce.</strong> Resize events fire in bursts while a user drags. Wait until
+            motion settles — often 150–300&nbsp;ms — before kicking off an expensive layout.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Step by step</h2>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 1</span>
+      <h3>Watch the container, not just the window</h3>
+      <p class="prose">
+        A <code>window</code> <code>resize</code> listener misses panel drags inside the page.
+        <code>ResizeObserver</code> fires whenever the element you care about changes size — the
+        right hook for grid columns, splitters, and flex children. Debounce the callback so layout
+        runs once after the user stops dragging, not on every intermediate pixel.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>watch-resize.js</span>
+        </div>
+        <pre><span class="kw">export function</span> <span class="fn">watchContainerResize</span>(<span class="id">el</span>, <span class="id">onResize</span>, <span class="id">debounceMs</span> = <span class="nu">1000</span>) {
+  <span class="kw">let</span> <span class="id">timer</span> = <span class="kw">null</span>;
+  <span class="kw">const</span> <span class="id">ro</span> = <span class="kw">new</span> <span class="fn">ResizeObserver</span>((<span class="id">entries</span>) => {
+    <span class="kw">const</span> { <span class="id">width</span>, <span class="id">height</span> } = <span class="id">entries</span>[<span class="nu">0</span>].<span class="id">contentRect</span>;
+    <span class="fn">clearTimeout</span>(<span class="id">timer</span>);
+    <span class="id">timer</span> = <span class="fn">setTimeout</span>(
+      () => <span class="id">onResize</span>(Math.<span class="fn">floor</span>(<span class="id">width</span>), Math.<span class="fn">floor</span>(<span class="id">height</span>)),
+      <span class="id">debounceMs</span>,
+    );
+  });
+  <span class="id">ro</span>.<span class="fn">observe</span>(<span class="id">el</span>);
+  <span class="kw">return</span> () => { <span class="id">ro</span>.<span class="fn">disconnect</span>(); <span class="fn">clearTimeout</span>(<span class="id">timer</span>); };
+}</pre>
+      </div>
+    </div>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 2</span>
+      <h3>Layout at the measured pixel size</h3>
+      <p class="prose">
+        Set <code>canvas.width</code> / <code>canvas.height</code> (or the SVG
+        <code>viewBox</code>) to the same values you pass into <code>layout()</code>. Height can
+        follow width with a fixed aspect ratio, track the container directly, or come from your
+        design system — as long as layout and renderer agree on pixels.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>render-at-size.js</span>
+        </div>
+        <pre><span class="kw">async function</span> <span class="fn">renderCloud</span>(<span class="id">w</span>, <span class="id">h</span>) {
+  <span class="id">canvas</span>.<span class="id">width</span>  = <span class="id">w</span>;
+  <span class="id">canvas</span>.<span class="id">height</span> = <span class="id">h</span>;
+
+  <span class="kw">const</span> <span class="id">placements</span> = <span class="kw">await</span> <span class="fn">layout</span>(<span class="id">items</span>, {
+    <span class="id">mode</span>: <span class="str">"pretty"</span>,
+    <span class="id">width</span>: <span class="id">w</span>,
+    <span class="id">height</span>: <span class="id">h</span>,
+    <span class="id">minFontSize</span>: <span class="nu">14</span>,
+    <span class="id">maxFontSize</span>: <span class="nu">72</span>,
+    <span class="id">padding</span>: <span class="nu">2</span>,
+  });
+
+  <span class="fn">drawWordCloud</span>(<span class="id">ctx</span>, <span class="id">placements</span>);
+}</pre>
+      </div>
+    </div>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 3</span>
+      <h3>Drop results from an older resize</h3>
+      <p class="prose">
+        Layout is async. If the user resizes again while a pass is still running, an earlier result
+        can arrive late and flash the wrong frame. Bump a generation counter before each call and
+        ignore placements that come back after a newer resize has started.
+      </p>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>render-at-size.js</span> <span class="code-block-tag">continued</span>
+        </div>
+        <pre><span class="kw">let</span> <span class="id">generation</span> = <span class="nu">0</span>;
+
+<span class="kw">async function</span> <span class="fn">renderCloud</span>(<span class="id">w</span>, <span class="id">h</span>) {
+  <span class="kw">const</span> <span class="id">pass</span> = ++<span class="id">generation</span>;
+  <span class="kw">const</span> <span class="id">placements</span> = <span class="kw">await</span> <span class="fn">layout</span>(<span class="id">items</span>, { <span class="id">width</span>: <span class="id">w</span>, <span class="id">height</span>: <span class="id">h</span>, <span class="cm">/* … */</span> });
+  <span class="kw">if</span> (<span class="id">pass</span> !== <span class="id">generation</span>) <span class="kw">return</span>;
+  <span class="fn">drawWordCloud</span>(<span class="id">ctx</span>, <span class="id">placements</span>);
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="section section-playground">
+    <h2>Try it yourself</h2>
+    <p class="section-sub section-sub--desktop">
+      Random datasets at 50 or 500 words. Drag the handle on the right edge of the panel to
+      resize the container — layout re-runs after you stop dragging (1&nbsp;s debounce).
+    </p>
+    <p class="section-sub section-sub--mobile">
+      Random datasets at 50 or 500 words. Drag the handle along the bottom edge to pull the
+      canvas taller — layout re-runs after you stop dragging (1&nbsp;s debounce).
+    </p>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>resizable container</span>
+      </div>
+      <div class="panel-body">
+        <div class="resize-demo" id="resize-box">
+          <div class="resize-cloud-host" id="cloud-host">
+            <canvas id="cloud"></canvas>
+          </div>
+          <div class="resize-handle" id="resize-handle" title="Drag to resize" aria-label="Resize panel"></div>
+        </div>
+        <div class="controls controls-below">
+          <button class="btn size-btn active" data-n="50"  data-mode="pretty">50 words</button>
+          <button class="btn size-btn"        data-n="500" data-mode="pretty">500 words</button>
+          <button class="btn" id="rerender" type="button">New random seed</button>
+          <span class="meta" id="meta"></span>
+        </div>
+        <p class="demo-note demo-note--desktop">
+          Container width: <strong id="size-label">—</strong>. Presets tune
+          <code>minFontSize</code> / <code>maxFontSize</code> so words stay readable at each scale
+          (50 → 16–88px, 500 → 10–52px). Try narrowing to mobile widths — words reflow into the
+          new bounds instead of clipping.
+        </p>
+        <p class="demo-note demo-note--mobile">
+          Container size: <strong id="size-label-mobile">—</strong>. Presets tune
+          <code>minFontSize</code> / <code>maxFontSize</code> so words stay readable at each scale
+          (50 → 16–88px, 500 → 10–52px). Pull the bottom handle to grow the canvas height — words
+          reflow into the taller bounds instead of clipping.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  import { layout } from "../js/index.js";
+  import { generate, WeightDist } from "../js/datasets.js";
+
+  const box      = document.getElementById("resize-box");
+  const host     = document.getElementById("cloud-host");
+  const handle   = document.getElementById("resize-handle");
+  const canvas   = document.getElementById("cloud");
+  const ctx      = canvas.getContext("2d");
+  const metaEl   = document.getElementById("meta");
+  const sizeLabel = document.getElementById("size-label");
+  const sizeLabelMobile = document.getElementById("size-label-mobile");
+  const palette  = ["#1f6feb","#238636","#a371f7","#db6d28","#cf222e","#9e6a03","#0891b2","#7c3aed"];
+  const mobileMq = matchMedia("(max-width: 768px)");
+
+  let currentN    = 50;
+  let currentMode = "pretty";
+  let seed        = 1;
+  let gen = 0;
+  let lastW = 0;
+  let lastH = 0;
+  let debounceTimer = null;
+
+  function isMobile() { return mobileMq.matches; }
+
+  function fontCfg(n) {
+    if (n <= 50) return { minFontSize: 16, maxFontSize: 88, padding: 2 };
+    return              { minFontSize: 10, maxFontSize: 52, padding: 2 };
+  }
+
+  function fontRangeLabel(cfg) {
+    return `min/max ${cfg.minFontSize}–${cfg.maxFontSize}px`;
+  }
+
+  function cardLayoutHeight(w, n) {
+    return Math.round(w * (n >= 500 ? 0.75 : 0.65));
+  }
+
+  function setDemoButtonsDisabled(disabled) {
+    document.querySelectorAll(".btn").forEach((b) => { b.disabled = disabled; });
+  }
+
+  function draw(placements) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    placements.forEach((p, i) => {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      if (p.rotation) ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.font = `${p.fontSize}px sans-serif`;
+      ctx.fillStyle = palette[i % palette.length];
+      ctx.fillText(p.text, 0, 0);
+      ctx.restore();
+    });
+  }
+
+  function layoutHeightPx(w) {
+    if (!isMobile()) return cardLayoutHeight(w, currentN);
+    const measured = Math.floor(host.getBoundingClientRect().height);
+    if (measured > 0) return measured;
+    return cardLayoutHeight(w, currentN);
+  }
+
+  function syncResizeMode() {
+    if (isMobile()) {
+      box.style.width = "";
+      host.style.height = "";
+      if (!box.style.height) {
+        const w = Math.floor(host.getBoundingClientRect().width) || 320;
+        const hostH = cardLayoutHeight(w, currentN);
+        box.style.height = `${Math.max(200, hostH) + handle.offsetHeight}px`;
+      }
+    } else {
+      host.style.height = "";
+      box.style.height = "";
+      if (!box.style.width) {
+        box.style.width = `${Math.min(720, Math.floor(host.getBoundingClientRect().width) || 640)}px`;
+      }
+    }
+    lastW = 0;
+    lastH = 0;
+  }
+
+  function updateSizeLabel(w, h) {
+    const text = `${w} × ${h} px`;
+    sizeLabel.textContent = text;
+    sizeLabelMobile.textContent = text;
+  }
+
+  async function renderAt(w, force = false, live = false) {
+    const cfg = fontCfg(currentN);
+    const h = layoutHeightPx(w);
+
+    if (!force) {
+      const wStable = Math.abs(w - lastW) < 2;
+      const hStable = !isMobile() || Math.abs(h - lastH) < 2;
+      if (wStable && hStable && lastW > 0) return;
+    }
+    lastW = w;
+    lastH = h;
+
+    canvas.width = w;
+    canvas.height = h;
+    updateSizeLabel(w, h);
+
+    const items = generate(currentN, WeightDist.Zipf, seed);
+    const myGen = ++gen;
+    if (!live) {
+      metaEl.textContent = "laying out…";
+      setDemoButtonsDisabled(true);
+    }
+    const t0 = performance.now();
+    const placements = await layout(items, {
+      mode: currentMode, width: w, height: h, ...cfg,
+    });
+    if (myGen !== gen) return;
+
+    draw(placements);
+    if (!live) {
+      const ms = (performance.now() - t0).toFixed(1);
+      metaEl.textContent = `${placements.length}/${items.length} placed · ${currentMode} · ${fontRangeLabel(cfg)} · ${ms} ms`;
+      setDemoButtonsDisabled(false);
+    }
+  }
+
+  function scheduleRender() {
+    if (dragging) return;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      const w = Math.floor(host.getBoundingClientRect().width);
+      if (w > 0) renderAt(w);
+    }, 200);
+  }
+
+  const ro = new ResizeObserver(scheduleRender);
+  ro.observe(host);
+
+  mobileMq.addEventListener("change", () => {
+    syncResizeMode();
+    scheduleRender();
+  });
+
+  let dragging = false;
+  handle.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    ++gen;
+    clearTimeout(debounceTimer);
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add("active");
+  });
+  handle.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const rect = box.getBoundingClientRect();
+    if (isMobile()) {
+      const newBoxH = Math.max(200 + handle.offsetHeight, e.clientY - rect.top);
+      box.style.height = `${newBoxH}px`;
+      const w = Math.floor(host.getBoundingClientRect().width);
+      const h = Math.floor(host.getBoundingClientRect().height);
+      updateSizeLabel(w, h);
+    } else {
+      const newW = Math.max(280, Math.min(900, e.clientX - rect.left));
+      box.style.width = `${newW}px`;
+      const h = cardLayoutHeight(newW, currentN);
+      updateSizeLabel(newW, h);
+    }
+  });
+  handle.addEventListener("pointerup", () => {
+    dragging = false;
+    handle.classList.remove("active");
+    scheduleRender();
+  });
+
+  document.querySelectorAll(".size-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentN    = Number(btn.dataset.n);
+      currentMode = btn.dataset.mode;
+      seed = 1;
+      lastW = 0;
+      lastH = 0;
+      if (isMobile()) {
+        const w = Math.floor(host.getBoundingClientRect().width) || 320;
+        const hostH = cardLayoutHeight(w, currentN);
+        box.style.height = `${Math.max(200, hostH) + handle.offsetHeight}px`;
+      }
+      renderAt(Math.floor(host.getBoundingClientRect().width) || 640, true);
+    });
+  });
+
+  document.getElementById("rerender").addEventListener("click", (e) => {
+    seed = Math.floor(Math.random() * 0xffff) + 2;
+    lastW = 0;
+    lastH = 0;
+    const btn = e.currentTarget;
+    btn.classList.remove("flashing");
+    void btn.offsetWidth;
+    btn.classList.add("flashing");
+    renderAt(Math.floor(host.getBoundingClientRect().width) || 640, true);
+  });
+
+  syncResizeMode();
+  renderAt(Math.floor(host.getBoundingClientRect().width) || 640, true);
+</script>
+</body>
+</html>

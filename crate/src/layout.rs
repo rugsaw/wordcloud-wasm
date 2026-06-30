@@ -610,10 +610,33 @@ pub(crate) fn layout_fast_counted(
     let mut placements = Vec::with_capacity(prepared.words.len());
 
     // Running top edges for the next row below / above the center band.
-    let center_top = if let Some(first) = shelves.first() {
-        (canvas_h - first.height) / 2
-    } else {
+    //
+    // The alternating pattern places row 0 at `center_top`, odd rows below it,
+    // and even rows (≥ 2) above it. To center the whole block the midpoint of
+    // the block's vertical span must equal canvas_h / 2:
+    //
+    //   block_top    = center_top - up_h          (top of highest "up" row)
+    //   block_bottom = center_top + h0 + down_h   (bottom of lowest "down" row)
+    //   midpoint     = center_top + (h0 + down_h - up_h) / 2
+    //
+    // Setting midpoint = canvas_h / 2 gives:
+    //   center_top = canvas_h / 2 - (h0 + down_h - up_h) / 2
+    //
+    // When content overflows the canvas center_top can be negative; the
+    // existing `top < 0` guard in the placement loop already clips those rows.
+    let center_top = if shelves.is_empty() {
         0
+    } else {
+        let h0 = shelves[0].height;
+        let down_h: i32 = shelves.iter().enumerate()
+            .filter(|(i, _)| i % 2 == 1)
+            .map(|(_, s)| s.height)
+            .sum();
+        let up_h: i32 = shelves.iter().enumerate()
+            .filter(|(i, _)| *i >= 2 && i % 2 == 0)
+            .map(|(_, s)| s.height)
+            .sum();
+        canvas_h / 2 - (h0 + down_h - up_h) / 2
     };
     let mut next_down = center_top; // top of the next row to place going down
     let mut next_up = center_top; // bottom of the next row to place going up
@@ -881,6 +904,26 @@ mod tests {
             "heaviest y={} not in the center band (H={})",
             first.y,
             config.height
+        );
+    }
+
+    #[test]
+    fn fast_block_is_vertically_centered_for_small_counts() {
+        // With few words (≤ ~50) the entire content block fits well inside the
+        // canvas. The fix ensures center_top is computed from the full block
+        // height so the block midpoint sits near canvas_h/2, not in the lower
+        // half (which was the bug: center_top used only first.height).
+        let config = LayoutConfig { width: 800.0, height: 600.0, min_font_size: 6.0, max_font_size: 16.0, padding: 1.0 };
+        let it = items(50);
+        let out = layout_fast(&it, &config);
+        assert!(!out.is_empty());
+        let min_y = out.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
+        let max_y = out.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+        let block_mid = (min_y + max_y) / 2.0;
+        let canvas_mid = config.height / 2.0;
+        assert!(
+            (block_mid - canvas_mid).abs() < config.height * 0.15,
+            "block midpoint {block_mid:.1} is too far from canvas center {canvas_mid:.1}",
         );
     }
 

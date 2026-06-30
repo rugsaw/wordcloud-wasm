@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interactive word clouds — wordcloud-wasm</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-back" href="../">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06z"/></svg>
+    wordcloud-wasm
+  </a>
+  <span class="nav-sep">/</span>
+  <span class="nav-title">Interactive</span>
+</nav>
+
+<div class="page">
+
+  <div class="section">
+    <h2>Hover, click, and highlight</h2>
+    <p class="guide-lead">
+      Layout only returns geometry — interactivity is entirely yours. This example attaches
+      pointer handlers to each SVG word so users can explore terms. The pattern works for
+      tooltips, filtering, drill-down links, and selection state in analytics dashboards.
+    </p>
+
+    <div class="callout tip">
+      <strong>Keep a weight lookup.</strong> Placements include <code>text</code> but not the
+      original <code>weight</code>. Build a <code>Map(text → weight)</code> before layout so
+      tooltips and click handlers can show the value behind each word.
+    </div>
+
+    <div class="prose">
+      <p><strong>Interaction flow:</strong></p>
+      <ol>
+        <li>Run <code>layout()</code> and render each word as its own SVG element (or Canvas
+            region with manual hit-testing).</li>
+        <li>On <code>pointerenter</code>, dim non-hovered words and show a tooltip with
+            <code>text</code> + <code>weight</code>.</li>
+        <li>On <code>click</code>, pin the selection or fire an app event (e.g. filter a table
+            by the clicked term).</li>
+        <li>Re-layout clears handlers — rebuild the SVG (or re-bind listeners) after each
+            layout pass.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Step by step</h2>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 1</span>
+      <h3>Wire pointer events per word</h3>
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span>interactive-svg.js</span>
+        </div>
+        <pre><span class="kw">export function</span> <span class="fn">bindWordInteractions</span>(<span class="id">el</span>, { <span class="id">text</span>, <span class="id">weight</span> }, <span class="id">handlers</span>) {
+  <span class="id">el</span>.<span class="id">style</span>.<span class="id">cursor</span> = <span class="str">"pointer"</span>;
+  <span class="id">el</span>.<span class="fn">addEventListener</span>(<span class="str">"pointerenter"</span>, () => <span class="id">handlers</span>.<span class="fn">onHover</span>(<span class="id">text</span>, <span class="id">weight</span>));
+  <span class="id">el</span>.<span class="fn">addEventListener</span>(<span class="str">"pointerleave"</span>, () => <span class="id">handlers</span>.<span class="fn">onLeave</span>());
+  <span class="id">el</span>.<span class="fn">addEventListener</span>(<span class="str">"click"</span>, () => <span class="id">handlers</span>.<span class="fn">onSelect</span>(<span class="id">text</span>, <span class="id">weight</span>));
+}</pre>
+      </div>
+    </div>
+
+    <div class="walkthrough">
+      <span class="step-label">Step 2</span>
+      <h3>Canvas alternative: bbox hit-testing</h3>
+      <p class="prose">
+        If you render on Canvas, store placements and on <code>mousemove</code> test whether the
+        pointer falls inside each word's axis-aligned bbox (approximate: half the string width from
+        <code>measureText</code>, half the <code>fontSize</code> in height). SVG avoids this
+        bookkeeping — the browser does hit-testing for free.
+      </p>
+    </div>
+  </div>
+
+  <div class="section section-playground">
+    <h2>Try it yourself</h2>
+    <p class="section-sub">
+      Hover a word to highlight it and see a tooltip; click to pin the selection. Switch between
+      50- and 500-word random datasets, or go fullscreen to explore a larger layout area.
+    </p>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span>interactive cloud</span>
+      </div>
+      <div class="panel-body">
+        <div class="demo-viewport" id="cloud-viewport">
+          <p class="fullscreen-hint">Press <kbd>Esc</kbd> or click Exit fullscreen to return to the demo card.</p>
+          <div class="svg-wrap interactive-cloud-host">
+            <svg id="cloud" class="word-cloud-svg interactive" role="img" aria-label="Interactive word cloud"></svg>
+            <div id="tooltip" class="word-tooltip" hidden aria-hidden="true"></div>
+          </div>
+          <div class="controls controls-below">
+            <button class="btn size-btn active" data-n="50"  data-mode="pretty">50 words</button>
+            <button class="btn size-btn"        data-n="500" data-mode="pretty">500 words</button>
+            <button class="btn" id="rerender" type="button">New random seed</button>
+            <button class="btn" id="fullscreen" type="button">Fullscreen</button>
+            <button class="btn" id="clear" type="button">Clear selection</button>
+            <span class="meta" id="meta"></span>
+          </div>
+        </div>
+        <p class="demo-note">
+          Presets tune <code>minFontSize</code> / <code>maxFontSize</code> so words stay readable
+          at each scale (50 → 16–88px, 500 → 10–52px). Fullscreen lays out against the viewport
+          so you can see the engine's maximum placement count.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  import { layout }               from "../js/index.js";
+  import { generate, WeightDist } from "../js/datasets.js";
+
+  const svg       = document.getElementById("cloud");
+  const viewport  = document.getElementById("cloud-viewport");
+  const tooltip   = document.getElementById("tooltip");
+  const metaEl    = document.getElementById("meta");
+  const cloudHost = svg.parentElement;
+  const palette   = ["#1f6feb","#238636","#a371f7","#db6d28","#cf222e","#9e6a03","#0891b2","#7c3aed"];
+
+  let currentN     = 50;
+  let currentMode  = "pretty";
+  let seed         = 1;
+  let weightByText = new Map();
+  let hovered      = null;
+  let selected     = null;
+  let wordEls      = [];
+
+  function fontCfg(n) {
+    if (n <= 50) return { minFontSize: 16, maxFontSize: 88, padding: 2 };
+    return              { minFontSize: 10, maxFontSize: 52, padding: 2 };
+  }
+
+  function fontRangeLabel(cfg) {
+    return `min/max ${cfg.minFontSize}–${cfg.maxFontSize}px`;
+  }
+
+  function cardLayoutHeight(w, n) {
+    return Math.round(w * (n >= 500 ? 0.75 : 0.65));
+  }
+
+  function setDemoButtonsDisabled(disabled) {
+    document.querySelectorAll(".btn").forEach((b) => {
+      if (b.id === "fullscreen") return;
+      b.disabled = disabled;
+    });
+  }
+
+  function isViewportFullscreen() {
+    return document.fullscreenElement === viewport;
+  }
+
+  function fullscreenLayoutSize() {
+    const pad = 40;
+    const hint = viewport.querySelector(".fullscreen-hint");
+    const controls = viewport.querySelector(".controls");
+    let chrome = pad;
+    if (hint) chrome += hint.offsetHeight + 8;
+    if (controls) chrome += controls.offsetHeight + 12;
+    return {
+      w: Math.max(320, Math.floor(window.innerWidth - pad)),
+      h: Math.max(200, Math.floor(window.innerHeight - chrome)),
+    };
+  }
+
+  function setupFullscreen(btn, onChange) {
+    btn.addEventListener("click", () => {
+      if (isViewportFullscreen()) document.exitFullscreen();
+      else viewport.requestFullscreen?.().catch(() => {});
+    });
+    viewport.addEventListener("fullscreenchange", () => {
+      btn.textContent = isViewportFullscreen() ? "Exit fullscreen" : "Fullscreen";
+      onChange();
+    });
+    window.addEventListener("resize", () => {
+      if (isViewportFullscreen()) onChange();
+    });
+  }
+
+  function hideTooltip() {
+    tooltip.hidden = true;
+    tooltip.setAttribute("aria-hidden", "true");
+  }
+
+  function showTooltip(el, text, weight) {
+    const hostRect = cloudHost.getBoundingClientRect();
+    const wordRect = el.getBoundingClientRect();
+    const left = wordRect.left + wordRect.width / 2 - hostRect.left;
+    const top = wordRect.top - hostRect.top;
+
+    tooltip.innerHTML = `<span class="word-tooltip-term">${text}</span><span class="word-tooltip-weight">weight ${weight}</span>`;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+    tooltip.hidden = false;
+    tooltip.setAttribute("aria-hidden", "false");
+  }
+
+  function updateHighlight() {
+    const active = selected || hovered;
+    wordEls.forEach(el => {
+      const on = el.dataset.text === active;
+      el.classList.toggle("dimmed", active != null && !on);
+      el.classList.toggle("highlighted", on);
+    });
+  }
+
+  function drawInteractive(placements, w, h) {
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    svg.setAttribute("width", String(w));
+    svg.setAttribute("height", String(h));
+    svg.style.aspectRatio = `${w} / ${h}`;
+    svg.replaceChildren();
+    wordEls = [];
+
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("width", String(w));
+    bg.setAttribute("height", String(h));
+    bg.setAttribute("fill", "#fff");
+    svg.appendChild(bg);
+
+    placements.forEach((p, i) => {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      el.textContent = p.text;
+      el.dataset.text = p.text;
+      el.setAttribute("font-size", String(p.fontSize));
+      el.setAttribute("fill", palette[i % palette.length]);
+      el.setAttribute("text-anchor", "middle");
+      el.setAttribute("dominant-baseline", "central");
+      el.setAttribute(
+        "transform",
+        p.rotation ? `translate(${p.x},${p.y}) rotate(${p.rotation})` : `translate(${p.x},${p.y})`,
+      );
+      const weight = weightByText.get(p.text);
+      el.addEventListener("pointerenter", () => {
+        hovered = p.text;
+        showTooltip(el, p.text, weight);
+        updateHighlight();
+      });
+      el.addEventListener("pointermove", () => {
+        if (hovered === p.text) showTooltip(el, p.text, weight);
+      });
+      el.addEventListener("pointerleave", () => {
+        hovered = null;
+        hideTooltip();
+        updateHighlight();
+      });
+      el.addEventListener("click", () => {
+        selected = p.text;
+        showTooltip(el, p.text, weight);
+        updateHighlight();
+      });
+      svg.appendChild(el);
+      wordEls.push(el);
+    });
+
+    updateHighlight();
+  }
+
+  async function render(n, mode, s) {
+    hideTooltip();
+    hovered = null;
+    selected = null;
+    metaEl.textContent = "laying out…";
+    setDemoButtonsDisabled(true);
+
+    const cfg = fontCfg(n);
+    let w, h;
+    if (isViewportFullscreen()) {
+      ({ w, h } = fullscreenLayoutSize());
+    } else {
+      w = Math.floor(cloudHost.getBoundingClientRect().width) || 800;
+      h = cardLayoutHeight(w, n);
+    }
+
+    const items = generate(n, WeightDist.Zipf, s);
+    weightByText = new Map(items.map(i => [i.text, i.weight]));
+
+    const t0 = performance.now();
+    const placements = await layout(items, { mode, width: w, height: h, ...cfg });
+    const ms = (performance.now() - t0).toFixed(1);
+
+    drawInteractive(placements, w, h);
+
+    metaEl.textContent = `${placements.length}/${items.length} placed · ${mode} · ${fontRangeLabel(cfg)} · ${ms} ms`;
+    setDemoButtonsDisabled(false);
+  }
+
+  setupFullscreen(document.getElementById("fullscreen"), () => render(currentN, currentMode, seed));
+
+  document.querySelectorAll(".size-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentN    = Number(btn.dataset.n);
+      currentMode = btn.dataset.mode;
+      seed = 1;
+      render(currentN, currentMode, seed);
+    });
+  });
+
+  document.getElementById("rerender").addEventListener("click", (e) => {
+    seed = Math.floor(Math.random() * 0xffff) + 2;
+    const btn = e.currentTarget;
+    btn.classList.remove("flashing");
+    void btn.offsetWidth;
+    btn.classList.add("flashing");
+    render(currentN, currentMode, seed);
+  });
+
+  document.getElementById("clear").addEventListener("click", () => {
+    selected = null;
+    hideTooltip();
+    updateHighlight();
+  });
+
+  window.addEventListener("resize", () => {
+    if (!isViewportFullscreen()) render(currentN, currentMode, seed);
+  });
+
+  render(currentN, currentMode, seed);
+</script>
+</body>
+</html>

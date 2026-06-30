@@ -48,8 +48,15 @@
       backdrop-filter: blur(6px);
       border-bottom: 1px solid var(--border);
     }
+    nav .brand-wrap { display: flex; align-items: center; gap: 8px; }
     nav .brand { font-weight: 700; font-size: 15px; color: var(--text); }
     nav .brand span { color: var(--cyan); }
+    nav .nav-version {
+      font-size: 11px; font-weight: 600;
+      padding: 2px 7px; border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg3); color: var(--muted);
+    }
     .nav-toggle {
       display: none;
       margin-left: auto;
@@ -182,6 +189,14 @@
     .demo-panel-header .dot.r { background: #ff5f57; }
     .demo-panel-header .dot.y { background: #febc2e; }
     .demo-panel-header .dot.g { background: #28c840; }
+    .panel-link {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--blue2) !important;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .panel-link:hover { text-decoration: underline !important; }
     .demo-panel-body { padding: 16px; }
 
     /* Canvas wrapper — scrollable for large datasets */
@@ -213,6 +228,59 @@
     .btn:disabled { opacity: 0.5; cursor: default; }
     .btn.flashing { animation: btn-flash 0.45s ease; }
     .meta { font-size: 12px; color: var(--muted); margin-left: 4px; }
+    .demo-note {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 10px 0 0;
+      line-height: 1.5;
+    }
+    .demo-viewport:fullscreen {
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      padding: 20px;
+      overflow: hidden;
+    }
+    .demo-viewport:fullscreen .canvas-scroll-wrap {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+      overflow: auto;
+      border-radius: 6px;
+    }
+    .demo-viewport:fullscreen .canvas-scroll-wrap canvas {
+      width: 100%;
+      height: auto;
+      border-radius: 6px;
+    }
+    .demo-viewport:fullscreen .controls {
+      flex-shrink: 0;
+      margin-top: 12px;
+    }
+    .demo-viewport:fullscreen .fullscreen-hint {
+      display: block;
+      flex-shrink: 0;
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .fullscreen-hint { display: none; }
+    #worker-demo-viewport .worker-fs-spin { display: none; }
+    #worker-demo-viewport:fullscreen .worker-fs-spin {
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .demo-note kbd, .fullscreen-hint kbd {
+      font: inherit;
+      font-size: 11px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg3);
+    }
     @keyframes btn-flash {
       0%   { background: var(--blue);  border-color: var(--blue2); color: #fff; }
       100% { background: var(--bg3);   border-color: var(--border); color: var(--text); }
@@ -286,25 +354,38 @@
     .step h3 { font-size: 16px; margin: 3px 0 4px; }
     .step p  { font-size: 14px; color: var(--muted); margin: 0; }
 
-    /* ── Example links ───────────────────────────────────── */
-    .example-links {
+    /* ── Example guide cards ─────────────────────────────── */
+    .example-cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 12px;
     }
-    .example-link {
+    .example-card {
       display: block;
-      padding: 16px 20px;
-      background: var(--bg2);
-      border: 1px solid var(--border);
+      padding: 16px 18px;
       border-radius: 10px;
-      color: var(--text) !important;
+      border: 1px solid var(--border);
+      background: var(--bg2);
+      color: inherit;
+      text-decoration: none;
       transition: border-color 0.15s;
-      text-decoration: none !important;
     }
-    .example-link:hover { border-color: var(--blue2); }
-    .example-link .el-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
-    .example-link .el-desc  { font-size: 12px; color: var(--muted); }
+    .example-card:hover { border-color: var(--blue2); text-decoration: none; }
+    .example-card strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .example-card span {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .example-card code {
+      font-size: 12px;
+      color: var(--cyan);
+    }
 
     /* ── Footer ──────────────────────────────────────────── */
     footer {
@@ -331,7 +412,10 @@
 <body>
 
 <nav>
-  <span class="brand">wordcloud<span>-wasm</span></span>
+  <div class="brand-wrap">
+    <span class="brand">wordcloud<span>-wasm</span></span>
+    <span class="nav-version" id="nav-version"></span>
+  </div>
   <button class="nav-toggle" type="button" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-menu">
     <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
       <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/>
@@ -339,9 +423,11 @@
   </button>
   <div class="nav-links" id="nav-menu">
     <a href="#demo">Demo</a>
+    <a href="#worker">Worker</a>
     <a href="#treemap">Treemap</a>
     <a href="#perf">Performance</a>
     <a href="#how">How it works</a>
+    <a href="#examples">Examples</a>
     <a class="gh-link" href="https://github.com/rugsaw/wordcloud-wasm" target="_blank" rel="noopener">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
       GitHub
@@ -357,8 +443,8 @@
     scaling from 50 to 50 000+ words. Framework-agnostic — your code does the drawing.
   </p>
   <div class="badges">
-    <span class="badge"><strong>~1 ms</strong> for 100 words (Fast)</span>
-    <span class="badge"><strong>~88 ms</strong> for 50 000 words</span>
+    <span class="badge"><strong>~1 ms</strong> for 100 words (Fast mode)</span>
+    <span class="badge"><strong>~88 ms</strong> for 50 000 words (Fast mode)</span>
     <span class="badge"><strong>~120×</strong> faster than d3-cloud</span>
     <span class="badge">Web Worker ready</span>
     <span class="badge">No bundler needed</span>
@@ -368,26 +454,39 @@
 <!-- ── Live demo ─────────────────────────────────────────── -->
 <section id="demo">
   <h2>Live demo</h2>
-  <p class="section-sub">Runs in-browser via WebAssembly — no server-side computation.</p>
+  <p class="section-sub">
+    Runs in-browser via WebAssembly — no server-side computation.
+    <a href="examples/canvas.html">Read the Canvas guide →</a>
+  </p>
 
   <div class="demo-grid">
     <!-- Canvas -->
     <div class="demo-panel">
       <div class="demo-panel-header">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span>canvas.html</span>
+        <span>Canvas</span>
       </div>
       <div class="demo-panel-body">
-        <div class="canvas-scroll-wrap" id="cloud-canvas-wrap">
-          <canvas id="cloud-canvas"></canvas>
+        <div class="demo-viewport" id="cloud-demo-viewport">
+          <p class="fullscreen-hint">Press <kbd>Esc</kbd> or click Exit fullscreen to return to the demo card.</p>
+          <div class="canvas-scroll-wrap">
+            <canvas id="cloud-canvas"></canvas>
+          </div>
+          <div class="controls">
+            <button class="btn size-btn active" data-n="50"   data-mode="pretty">50 words</button>
+            <button class="btn size-btn"        data-n="500"  data-mode="pretty">500 words</button>
+            <button class="btn size-btn"        data-n="5000" data-mode="fast"  >5 000 words</button>
+            <button class="btn" id="rerender">Re-render</button>
+            <button class="btn" id="cloud-fullscreen" type="button">Fullscreen</button>
+            <span class="meta" id="cloud-meta"></span>
+          </div>
         </div>
-        <div class="controls">
-          <button class="btn size-btn active" data-n="50"   data-mode="pretty">50 words</button>
-          <button class="btn size-btn"        data-n="500"  data-mode="pretty">500 words</button>
-          <button class="btn size-btn"        data-n="5000" data-mode="fast"  >5 000 words</button>
-          <button class="btn" id="rerender">Re-render</button>
-          <span class="meta" id="cloud-meta"></span>
-        </div>
+        <p class="demo-note">
+          The card limits canvas size, so fewer words may fit than the engine can place.
+          This demo sets <code>minFontSize</code> / <code>maxFontSize</code> per preset
+          (50 words: 16–88px, 500: 10–52px, 5&nbsp;000: 6–16px) — word weight maps within that range; you can pass any values you want.
+          Open <strong>Fullscreen</strong> to lay out on the full viewport and see the maximum number of words placed.
+        </p>
       </div>
     </div>
 
@@ -435,26 +534,40 @@
 <!-- ── Web Worker demo ────────────────────────────────────── -->
 <section id="worker">
   <h2>Off the main thread</h2>
-  <p class="section-sub">Layout runs in a Web Worker — the spinner below never stops, proving the UI stays responsive.</p>
+  <p class="section-sub">
+    Layout runs in a Web Worker — the spinner below never stops, proving the UI stays responsive.
+    <a href="examples/worker.html">Read the Web Worker guide →</a>
+  </p>
 
   <div class="demo-grid">
     <div class="demo-panel">
       <div class="demo-panel-header">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span>Web Worker demo</span>
-        <span class="spin" style="margin-left:auto" title="main thread stays responsive"></span>
+        <span>Web Worker</span>
+        <span class="spin" title="main thread stays responsive"></span>
       </div>
       <div class="demo-panel-body">
-        <div class="canvas-scroll-wrap">
-          <canvas id="worker-canvas"></canvas>
+        <div class="demo-viewport" id="worker-demo-viewport">
+          <p class="fullscreen-hint">Press <kbd>Esc</kbd> or click Exit fullscreen to return to the demo card.</p>
+          <div class="canvas-scroll-wrap">
+            <canvas id="worker-canvas"></canvas>
+          </div>
+          <div class="controls">
+            <button class="btn worker-size-btn active" data-n="50"   data-mode="pretty">50 words</button>
+            <button class="btn worker-size-btn"        data-n="500"  data-mode="pretty">500 words</button>
+            <button class="btn worker-size-btn"        data-n="5000" data-mode="fast"  >5 000 words</button>
+            <button class="btn" id="worker-run">Re-run layout</button>
+            <button class="btn" id="worker-fullscreen" type="button">Fullscreen</button>
+            <span class="spin worker-fs-spin" title="main thread stays responsive" aria-hidden="true"></span>
+            <span class="meta" id="worker-meta">idle</span>
+          </div>
         </div>
-        <div class="controls">
-          <button class="btn worker-size-btn active" data-n="24"   data-mode="pretty">24 words</button>
-          <button class="btn worker-size-btn"        data-n="500"  data-mode="pretty">500 words</button>
-          <button class="btn worker-size-btn"        data-n="5000" data-mode="fast"  >5 000 words</button>
-          <button class="btn" id="worker-run">Re-run layout</button>
-          <span class="meta" id="worker-meta">idle</span>
-        </div>
+        <p class="demo-note">
+          The card limits canvas size, so fewer words may fit than the engine can place.
+          This demo sets <code>minFontSize</code> / <code>maxFontSize</code> per preset
+          (50 words: 16–88px, 500: 10–52px, 5&nbsp;000: 6–16px) — word weight maps within that range; you can pass any values you want.
+          Open <strong>Fullscreen</strong> to lay out on the full viewport and see the maximum number of words placed.
+        </p>
       </div>
     </div>
 
@@ -488,20 +601,25 @@
   <p class="section-sub">
     The <code style="color:var(--cyan)">LayoutEngine</code> trait is generic. Treemap is a fully-implemented
     strategy with its own output type — areas proportional to weight, no overlaps.
+    <a href="examples/treemap.html">Read the Treemap guide →</a>
   </p>
 
   <div class="demo-grid">
     <div class="demo-panel">
       <div class="demo-panel-header">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span>treemap.html</span>
+        <span>Treemap</span>
       </div>
       <div class="demo-panel-body">
-        <div class="canvas-scroll-wrap">
-          <canvas id="treemap-canvas" class="dark-bg"></canvas>
-        </div>
-        <div class="controls">
-          <span class="meta" id="treemap-meta"></span>
+        <div class="demo-viewport" id="treemap-demo-viewport">
+          <p class="fullscreen-hint">Press <kbd>Esc</kbd> or click Exit fullscreen to return to the demo card.</p>
+          <div class="canvas-scroll-wrap">
+            <canvas id="treemap-canvas" class="dark-bg"></canvas>
+          </div>
+          <div class="controls">
+            <button class="btn" id="treemap-fullscreen" type="button">Fullscreen</button>
+            <span class="meta" id="treemap-meta"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -639,20 +757,38 @@
 <!-- ── Examples ──────────────────────────────────────────── -->
 <section id="examples">
   <h2>Examples</h2>
-  <p class="section-sub">Full standalone pages — serve the repo root over HTTP and open them directly.</p>
-
-  <div class="example-links">
-    <a class="example-link" href="examples/canvas.html">
-      <div class="el-title">Canvas renderer</div>
-      <div class="el-desc">Word cloud on a &lt;canvas&gt;. Small / medium / large presets with re-roll.</div>
+  <p class="section-sub">
+    In-depth walkthroughs with annotated code, layout options explained, and a playground on each page —
+    from Canvas and SVG rendering to text tokenization, interactivity, workers, and treemaps.
+  </p>
+  <div class="example-cards">
+    <a class="example-card" href="examples/canvas.html">
+      <strong>Drawing a word cloud with Canvas</strong>
+      <span>Weighted input → WASM layout → center-anchored <code>fillText</code> rendering. Layout modes, font sizing, and a live demo.</span>
     </a>
-    <a class="example-link" href="examples/worker.html">
-      <div class="el-title">Web Worker</div>
-      <div class="el-desc">Off-main-thread layout. A CSS spinner proves the UI never freezes.</div>
+    <a class="example-card" href="examples/svg.html">
+      <strong>Rendering with SVG</strong>
+      <span>Crisp scalable text, per-word DOM nodes, and CSS styling. Same placements, different renderer.</span>
     </a>
-    <a class="example-link" href="examples/treemap.html">
-      <div class="el-title">Treemap</div>
-      <div class="el-desc">Squarified treemap via the same LayoutEngine trait, different output type.</div>
+    <a class="example-card" href="examples/interactive.html">
+      <strong>Interactive word clouds</strong>
+      <span>Hover highlights, click-to-select, and tooltips. Attach pointer events to each placed word.</span>
+    </a>
+    <a class="example-card" href="examples/text-input.html">
+      <strong>From raw text to word cloud</strong>
+      <span>Tokenize prose, count frequencies, filter stop words, and lay out the top terms.</span>
+    </a>
+    <a class="example-card" href="examples/responsive.html">
+      <strong>Responsive word clouds</strong>
+      <span>Re-run layout when a dashboard panel or viewport changes size — with a draggable demo and width presets.</span>
+    </a>
+    <a class="example-card" href="examples/worker.html">
+      <strong>Running layout in a Web Worker</strong>
+      <span>Keep the UI responsive during large clouds. Client/worker protocol, concurrent requests, and when to move off-thread.</span>
+    </a>
+    <a class="example-card" href="examples/treemap.html">
+      <strong>Building a treemap layout</strong>
+      <span>Same weighted input, rectangle output. Squarified tiling, top-left coordinates, and label sizing.</span>
     </a>
   </div>
 </section>
@@ -663,7 +799,8 @@
     · MIT License · Built with Rust + WebAssembly
   </p>
   <p style="margin-top:4px">
-    <a href="https://github.com/rugsaw/wordcloud-wasm/blob/main/BENCHMARKS.md" target="_blank" rel="noopener">Benchmarks</a> ·
+    <a href="BENCHMARKS.md">Benchmarks</a> ·
+    <a href="#examples">Examples</a> ·
     <a href="https://github.com/rugsaw/wordcloud-wasm#readme" target="_blank" rel="noopener">README</a>
   </p>
 </footer>
@@ -685,6 +822,14 @@
         toggle.setAttribute("aria-expanded", "false");
       });
     });
+
+    fetch("./package.json")
+      .then((r) => r.json())
+      .then((pkg) => {
+        const el = document.getElementById("nav-version");
+        if (el && pkg.version) el.textContent = "v" + pkg.version;
+      })
+      .catch(() => {});
   })();
 </script>
 <script type="module">
@@ -698,6 +843,52 @@
     if (mode === "fast") return { minFontSize: 6, maxFontSize: 16, padding: 1 };
     if (n <= 50)         return { minFontSize: 16, maxFontSize: 88, padding: 2 };
     return                      { minFontSize: 10, maxFontSize: 52, padding: 2 };
+  }
+
+  function fontRangeLabel(cfg) {
+    return `min/max ${cfg.minFontSize}–${cfg.maxFontSize}px`;
+  }
+
+  function cardLayoutHeight(w, n) {
+    return Math.round(w * (n >= 5000 ? 0.56 : n >= 500 ? 0.75 : 0.65));
+  }
+
+function setDemoButtonsDisabled(disabled) {
+    document.querySelectorAll(".btn").forEach((b) => {
+      if (b.id.endsWith("-fullscreen")) return;
+      b.disabled = disabled;
+    });
+  }
+
+  function isViewportFullscreen(viewport) {
+    return document.fullscreenElement === viewport;
+  }
+
+  function fullscreenLayoutSize(viewport) {
+    const pad = 40;
+    const hint = viewport.querySelector(".fullscreen-hint");
+    const controls = viewport.querySelector(".controls");
+    let chrome = pad;
+    if (hint) chrome += hint.offsetHeight + 8;
+    if (controls) chrome += controls.offsetHeight + 12;
+    return {
+      w: Math.max(320, Math.floor(window.innerWidth - pad)),
+      h: Math.max(200, Math.floor(window.innerHeight - chrome)),
+    };
+  }
+
+  function setupFullscreen({ viewport, btn, onChange }) {
+    btn.addEventListener("click", () => {
+      if (isViewportFullscreen(viewport)) document.exitFullscreen();
+      else viewport.requestFullscreen?.().catch(() => {});
+    });
+    viewport.addEventListener("fullscreenchange", () => {
+      btn.textContent = isViewportFullscreen(viewport) ? "Exit fullscreen" : "Fullscreen";
+      onChange();
+    });
+    window.addEventListener("resize", () => {
+      if (isViewportFullscreen(viewport)) onChange();
+    });
   }
 
   function drawPlacements(ctx, placements) {
@@ -715,24 +906,29 @@
   }
 
   // ── Word cloud demo ──────────────────────────────────────
-  const cloudCanvas = document.getElementById("cloud-canvas");
-  const cloudCtx    = cloudCanvas.getContext("2d");
-  const cloudMeta   = document.getElementById("cloud-meta");
+  const cloudCanvas   = document.getElementById("cloud-canvas");
+  const cloudViewport = document.getElementById("cloud-demo-viewport");
+  const cloudCtx      = cloudCanvas.getContext("2d");
+  const cloudMeta     = document.getElementById("cloud-meta");
   let currentN    = 50;
   let currentMode = "pretty";
   let seed = 1;
 
   async function renderCloud(n, mode, s) {
     cloudMeta.textContent = "laying out…";
-    document.querySelectorAll(".btn").forEach(b => b.disabled = true);
-
-    const w = Math.floor(cloudCanvas.getBoundingClientRect().width);
-    if (!w) { document.querySelectorAll(".btn").forEach(b => b.disabled = false); return; }
+    setDemoButtonsDisabled(true);
 
     const fontCfg = displayFontCfg(n, mode);
-    // Lay out into a landscape area that fits the panel — the canvas renders at
-    // the panel width, so keeping height a fraction of width avoids a long scroll.
-    const h = Math.round(w * (n >= 5000 ? 0.56 : n >= 500 ? 0.75 : 0.65));
+    let w, h;
+    if (isViewportFullscreen(cloudViewport)) {
+      ({ w, h } = fullscreenLayoutSize(cloudViewport));
+    } else {
+      w = Math.floor(cloudCanvas.getBoundingClientRect().width);
+      if (!w) { setDemoButtonsDisabled(false); return; }
+      // Lay out into a landscape area that fits the panel — the canvas renders at
+      // the panel width, so keeping height a fraction of width avoids a long scroll.
+      h = cardLayoutHeight(w, n);
+    }
 
     cloudCanvas.width  = w;
     cloudCanvas.height = h;
@@ -742,17 +938,16 @@
     const placements = await layout(items, { mode, width: w, height: h, ...fontCfg });
     const ms = (performance.now() - t0).toFixed(1);
 
-    // Trim canvas to the actual bounding box of placed words (skip for the dense
-    // 5000-word cloud, which already fills its compact landscape area).
-    if (n < 5000 && placements.length > 0) {
-      const maxY = Math.max(...placements.map(p => p.y + p.fontSize));
-      cloudCanvas.height = Math.ceil(maxY) + 20;
-    }
-
     drawPlacements(cloudCtx, placements);
-    cloudMeta.textContent = `${placements.length}/${n} placed · ${mode} · ${ms} ms`;
-    document.querySelectorAll(".btn").forEach(b => b.disabled = false);
+    cloudMeta.textContent = `${placements.length}/${n} placed · ${mode} · ${fontRangeLabel(fontCfg)} · ${ms} ms`;
+    setDemoButtonsDisabled(false);
   }
+
+  setupFullscreen({
+    viewport: cloudViewport,
+    btn: document.getElementById("cloud-fullscreen"),
+    onChange: () => renderCloud(currentN, currentMode, seed),
+  });
 
   document.querySelectorAll(".size-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -775,58 +970,58 @@
   renderCloud(currentN, currentMode, seed);
 
   // ── Worker demo ──────────────────────────────────────────
-  const workerCanvas = document.getElementById("worker-canvas");
-  const workerCtx    = workerCanvas.getContext("2d");
-  const workerMeta   = document.getElementById("worker-meta");
-
-  // Curated list used for the default 24-word view; larger presets are generated.
-  const WORKER_WORDS = [
-    ["WebAssembly", 100], ["Rust", 92], ["layout", 70], ["engine", 64],
-    ["canvas", 55], ["spiral", 50], ["bitmap", 48], ["mask", 44],
-    ["collision", 40], ["occupancy", 38], ["render", 34], ["weight", 30],
-    ["font", 28], ["pretty", 26], ["fast", 24], ["balanced", 22],
-    ["grid", 20], ["pixels", 18], ["word", 16], ["cloud", 14],
-    ["vector", 12], ["packing", 11], ["wasm", 10], ["speed", 9],
-  ];
-  const workerShowcase = WORKER_WORDS.map(([text, weight]) => ({ text, weight }));
+  const workerCanvas   = document.getElementById("worker-canvas");
+  const workerViewport = document.getElementById("worker-demo-viewport");
+  const workerCtx      = workerCanvas.getContext("2d");
+  const workerMeta     = document.getElementById("worker-meta");
 
   const client = createLayoutClient();
 
-  let workerN    = 24;
+  let workerN    = 50;
   let workerMode = "pretty";
   let workerSeed = 1;
 
   function workerItemsFor(n) {
-    return n <= 24 ? workerShowcase : generate(n, WeightDist.Zipf, workerSeed);
+    return generate(n, WeightDist.Zipf, workerSeed);
   }
 
   async function runWorker() {
     workerMeta.textContent = "laying out on worker…";
-    const w = Math.floor(workerCanvas.getBoundingClientRect().width);
-    if (!w) return;
-    // Landscape area that fits the panel — keeps even the 5000-word cloud on-screen.
-    const ratio = workerN >= 5000 ? 0.56 : workerN >= 500 ? 0.6 : 0.55;
-    const h = Math.round(w * ratio);
+    let w, h;
+    if (isViewportFullscreen(workerViewport)) {
+      ({ w, h } = fullscreenLayoutSize(workerViewport));
+    } else {
+      w = Math.floor(workerCanvas.getBoundingClientRect().width);
+      if (!w) return;
+      h = cardLayoutHeight(w, workerN);
+    }
     workerCanvas.width  = w;
     workerCanvas.height = h;
 
     const items = workerItemsFor(workerN);
-    document.querySelectorAll(".btn").forEach(b => b.disabled = true);
+    const fontCfg = displayFontCfg(workerN, workerMode);
+    setDemoButtonsDisabled(true);
     const t0 = performance.now();
     try {
       const placements = await client.layout(items, {
         mode: workerMode, width: w, height: h,
-        ...displayFontCfg(workerN, workerMode),
+        ...fontCfg,
       });
-      workerCtx.clearRect(0, 0, w, h);
+      workerCtx.clearRect(0, 0, w, workerCanvas.height);
       drawPlacements(workerCtx, placements);
       const ms = (performance.now() - t0).toFixed(1);
-      workerMeta.textContent = `${placements.length}/${items.length} placed · ${workerMode} · ${ms} ms (off-thread)`;
+      workerMeta.textContent = `${placements.length}/${items.length} placed · ${workerMode} · ${fontRangeLabel(fontCfg)} · ${ms} ms (off-thread)`;
     } catch (err) {
       workerMeta.textContent = `error: ${err.message}`;
     }
-    document.querySelectorAll(".btn").forEach(b => b.disabled = false);
+    setDemoButtonsDisabled(false);
   }
+
+  setupFullscreen({
+    viewport: workerViewport,
+    btn: document.getElementById("worker-fullscreen"),
+    onChange: runWorker,
+  });
 
   document.querySelectorAll(".worker-size-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -843,9 +1038,10 @@
   runWorker();
 
   // ── Treemap demo ─────────────────────────────────────────
-  const tmCanvas = document.getElementById("treemap-canvas");
-  const tmCtx    = tmCanvas.getContext("2d");
-  const tmMeta   = document.getElementById("treemap-meta");
+  const tmCanvas   = document.getElementById("treemap-canvas");
+  const tmViewport = document.getElementById("treemap-demo-viewport");
+  const tmCtx      = tmCanvas.getContext("2d");
+  const tmMeta     = document.getElementById("treemap-meta");
 
   const TM_DATA = [
     ["WebAssembly", 100], ["Rust", 78], ["layout", 60], ["engine", 52],
@@ -857,9 +1053,14 @@
   const tmItems = TM_DATA.map(([text, weight]) => ({ text, weight }));
 
   async function renderTreemap() {
-    const w = Math.floor(tmCanvas.getBoundingClientRect().width);
-    if (!w) return;
-    const h = Math.round(w * 0.55);
+    let w, h;
+    if (isViewportFullscreen(tmViewport)) {
+      ({ w, h } = fullscreenLayoutSize(tmViewport));
+    } else {
+      w = Math.floor(tmCanvas.getBoundingClientRect().width);
+      if (!w) return;
+      h = Math.round(w * 0.55);
+    }
     tmCanvas.width  = w;
     tmCanvas.height = h;
     try {
@@ -879,6 +1080,12 @@
       tmMeta.textContent = `error: ${err.message}`;
     }
   }
+
+  setupFullscreen({
+    viewport: tmViewport,
+    btn: document.getElementById("treemap-fullscreen"),
+    onChange: renderTreemap,
+  });
 
   renderTreemap();
 </script>
